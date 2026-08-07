@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.4...v0.1.5) (2026-08-07)
+
+
+### Bug Fixes
+
+* extract suffixless street directionals ([e88901d](https://github.com/MarvinAmador7/address-interpreter/commit/e88901d6ff7e34999cc56d1b416d9cd4f0df5247))
+
 ## [0.1.4](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.3...v0.1.4) (2026-08-07)
 
 
