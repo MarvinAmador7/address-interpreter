@@ -15,6 +15,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pull-request-title:
+    name: Conventional pull request title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Validate title
+        env:
+          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node --input-type=module <<'NODE'
+          const title = process.env.PULL_REQUEST_TITLE ?? "";
+          const conventionalCommit = /^[a-z][a-z0-9-]*(?:\([^)]+\))?!?: \S.*$/;
+
+          if (!conventionalCommit.test(title)) {
+            console.error(
+              `Pull request title must use Conventional Commit syntax, for example "fix: parse additional USPS suffixes". Received: ${JSON.stringify(title)}`,
+            );
+            process.exit(1);
+          }
+          NODE
+
   quality:
     name: Typecheck, test, and build
     runs-on: ubuntu-latest
