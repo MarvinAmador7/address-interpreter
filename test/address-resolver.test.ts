@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createAddressResolver,
+  createFullAddressResolver,
   type AddressIndex,
   type AddressMatch,
 } from "../src/index";
@@ -133,5 +134,65 @@ describe("createAddressResolver", () => {
     if (resolution.status === "resolved") {
       expect(resolution.match.entityId).toBe("property-42");
     }
+  });
+});
+
+describe("createFullAddressResolver", () => {
+  test("resolves a locality interpretation through the existing address index", async () => {
+    const match: AddressMatch<PropertyRecord> = {
+      candidateId: "matched-by-index",
+      entityId: "property-42",
+      value: { addressId: "attom-42" },
+    };
+    let matchedCandidateId: string | undefined;
+    const resolver = createFullAddressResolver<PropertyRecord>({
+      async lookupCandidates(candidates) {
+        const candidate = candidates.find(
+          ({ components }) =>
+            components.streetName === "MAIN" &&
+            components.streetSuffix === "ST" &&
+            components.city === "AUSTIN" &&
+            components.state === "TX" &&
+            components.postalCode === "78701",
+        );
+
+        if (!candidate) return [];
+        matchedCandidateId = candidate.id;
+        return [{ ...match, candidateId: candidate.id }];
+      },
+    });
+
+    const resolution = await resolver.resolve(
+      "123 Main St Austin TX 78701",
+    );
+
+    expect(resolution.status).toBe("resolved");
+    if (resolution.status === "resolved") {
+      expect(resolution.match).toEqual({
+        ...match,
+        candidateId: matchedCandidateId,
+      });
+      expect(resolution.interpretation.candidates).toContainEqual(
+        expect.objectContaining({ id: matchedCandidateId }),
+      );
+    }
+  });
+
+  test("returns invalid without querying the index for a missing house number", async () => {
+    let indexWasCalled = false;
+    const resolver = createFullAddressResolver<PropertyRecord>({
+      async lookupCandidates() {
+        indexWasCalled = true;
+        return [];
+      },
+    });
+
+    const resolution = await resolver.resolve("Main St Austin TX 78701");
+
+    expect(resolution.status).toBe("invalid");
+    expect(indexWasCalled).toBe(false);
+    expect(resolution.interpretation.diagnostics).toEqual([
+      "missing-house-number",
+    ]);
   });
 });
