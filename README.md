@@ -519,16 +519,6 @@ Releases are automated with [Release Please](https://github.com/googleapis/relea
 4. GitHub Actions publishes to npm through a short-lived OIDC identity.
 5. npm attaches provenance linking the package tarball to its public source and workflow.
 
-No long-lived npm publish token is stored in the repository or in GitHub Actions secrets. The trusted publisher is restricted to:
-
-```text
-GitHub owner:       MarvinAmador7
-Repository:         address-interpreter
-Workflow filename:  release.yml
-Environment name:   npm
-Allowed action:     npm publish
-```
-
 Commit messages follow Conventional Commits:
 
 - `fix:` produces a patch release;
