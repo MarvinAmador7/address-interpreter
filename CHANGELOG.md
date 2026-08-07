@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.3...v0.1.4) (2026-08-07)
+
+
+### Bug Fixes
+
+* expand USPS street suffix vocabulary ([35fc8f7](https://github.com/MarvinAmador7/address-interpreter/commit/35fc8f7aabf7c006f2c16b03b50c383a3a2b843e))
+
 ## [0.1.3](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.2...v0.1.3) (2026-08-07)
 
 
