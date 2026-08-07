@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.5...v0.2.0) (2026-08-07)
+
+
+### Features
+
+* interpret full-address localities ([3a13cf4](https://github.com/MarvinAmador7/address-interpreter/commit/3a13cf4b51abd876a1e4493682317e4539a4d2f6))
+
 ## [0.1.5](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.4...v0.1.5) (2026-08-07)
 
 
