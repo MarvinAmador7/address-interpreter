@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.2...v0.1.3) (2026-08-07)
+
+
+### Bug Fixes
+
+* publish updated package readme ([0e6c71c](https://github.com/MarvinAmador7/address-interpreter/commit/0e6c71c897afe93d8282808e42736715ec4cc005))
+
 ## [0.1.2](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.1...v0.1.2) (2026-08-07)
 
 
