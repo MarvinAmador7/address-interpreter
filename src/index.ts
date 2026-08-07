@@ -439,8 +439,11 @@ export function interpretAddress(input: AddressInput): AddressInterpretation {
             },
             components: {
               houseNumber,
+              ...(barePreDirectional
+                ? { preDirectional: barePreDirectional }
+                : {}),
               streetName: tokens
-                .slice(1)
+                .slice(bareStreetNameStart)
                 .map((token) => token.normalized)
                 .join(" "),
               ...locality,
@@ -458,7 +461,11 @@ export function interpretAddress(input: AddressInput): AddressInterpretation {
       tokens.length - (literalPostDirectional ? 2 : 1);
     const literalStreetSuffix =
       STREET_SUFFIXES[tokens[literalSuffixIndex].normalized];
-    const literalPreDirectional = DIRECTIONALS[tokens[1].normalized];
+    const possibleLiteralPreDirectional = DIRECTIONALS[tokens[1].normalized];
+    const literalPreDirectional =
+      possibleLiteralPreDirectional && literalSuffixIndex > 2
+        ? possibleLiteralPreDirectional
+        : undefined;
     const literalStreetNameStart = literalPreDirectional ? 2 : 1;
 
     if (literalStreetSuffix && literalStreetNameStart < literalSuffixIndex) {
@@ -497,6 +504,19 @@ export function interpretAddress(input: AddressInput): AddressInterpretation {
   }
 
   if (unitDesignatorIndex === -1 && tokens.length >= 2) {
+    const fallbackPreDirectional =
+      tokens.length >= 3 ? DIRECTIONALS[tokens[1].normalized] : undefined;
+    const fallbackPostDirectional =
+      fallbackPreDirectional &&
+      tokens.length === 4 &&
+      /^\d+$/.test(tokens[2].normalized)
+        ? DIRECTIONALS[tokens[3].normalized]
+        : undefined;
+    const fallbackStreetNameStart = fallbackPreDirectional ? 2 : 1;
+    const fallbackStreetNameEnd = fallbackPostDirectional
+      ? tokens.length - 1
+      : tokens.length;
+
     return {
       tokens,
       diagnostics: [],
@@ -510,10 +530,16 @@ export function interpretAddress(input: AddressInput): AddressInterpretation {
           },
           components: {
             houseNumber: tokens[0].normalized,
+            ...(fallbackPreDirectional
+              ? { preDirectional: fallbackPreDirectional }
+              : {}),
             streetName: tokens
-              .slice(1)
+              .slice(fallbackStreetNameStart, fallbackStreetNameEnd)
               .map((token) => token.normalized)
               .join(" "),
+            ...(fallbackPostDirectional
+              ? { postDirectional: fallbackPostDirectional }
+              : {}),
             city: normalize(input.city),
             state: normalize(input.state),
             postalCode: normalize(input.postalCode),

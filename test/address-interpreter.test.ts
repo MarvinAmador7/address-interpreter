@@ -259,6 +259,101 @@ describe("interpretAddress", () => {
   });
 
   test.each([
+    ["123 N Main", "N", "MAIN"],
+    ["26027 S Outrider Banks", "S", "OUTRIDER BANKS"],
+    ["731 W Calle Lupa", "W", "CALLE LUPA"],
+    ["202 N 17th Street D", "N", "17TH STREET D"],
+  ])(
+    "separates the pre-directional from suffixless street %s",
+    (deliveryLine, preDirectional, streetName) => {
+      const interpretation = interpretAddress({
+        deliveryLine,
+        city: "Test City",
+        state: "TX",
+      });
+
+      expect(interpretation.candidates).toHaveLength(1);
+      expect(interpretation.candidates[0]?.components).toEqual({
+        houseNumber: deliveryLine.split(" ")[0],
+        preDirectional,
+        streetName,
+        city: "TEST CITY",
+        state: "TX",
+        postalCode: undefined,
+      });
+      expect(interpretation.candidates[0]?.assumptions).toEqual([]);
+    },
+  );
+
+  test("separates both directionals in a suffixless grid-style address", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "1196 W 2325 S",
+      city: "Salt Lake City",
+      state: "UT",
+    });
+
+    expect(interpretation.candidates[0]?.components).toEqual({
+      houseNumber: "1196",
+      preDirectional: "W",
+      streetName: "2325",
+      postDirectional: "S",
+      city: "SALT LAKE CITY",
+      state: "UT",
+      postalCode: undefined,
+    });
+  });
+
+  test("keeps a leading directional in both trailing-token interpretations", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "123 N Main St 4",
+      city: "Austin",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      preDirectional: "N",
+      streetName: "MAIN",
+      streetSuffix: "ST",
+      secondary: { number: "4" },
+    });
+    expect(interpretation.candidates[1]?.components).toMatchObject({
+      preDirectional: "N",
+      streetName: "MAIN ST 4",
+    });
+  });
+
+  test("keeps a one-token directional street name literal", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "123 N",
+      city: "Test City",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "N",
+    });
+    expect(
+      interpretation.candidates[0]?.components.preDirectional,
+    ).toBeUndefined();
+  });
+
+  test("keeps a directional word as the street name when only a suffix follows", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "123 North Ave",
+      city: "Austin",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "NORTH",
+      streetSuffix: "AVE",
+    });
+    expect(
+      interpretation.candidates[0]?.components.preDirectional,
+    ).toBeUndefined();
+  });
+
+  test.each([
     ["Boulevard", "BLVD"],
     ["Circle", "CIR"],
     ["Court", "CT"],
