@@ -81,7 +81,11 @@ export type AddressResolution<T> =
       matches: readonly AddressMatch<T>[];
     }
   | {
-      status: "not-found" | "invalid";
+      status: "not-found";
+      interpretation: AddressInterpretation;
+    }
+  | {
+      status: "invalid";
       interpretation: AddressInterpretation;
     };
 
