@@ -382,7 +382,7 @@ interface AddressComponents {
 }
 ```
 
-Recognized values are normalized to uppercase. Known directionals, street suffixes, and secondary-unit designators use their abbreviated forms. Unrecognized or suffixless street text remains a literal `streetName`.
+Recognized values are normalized to uppercase. Known directionals, street suffixes, and secondary-unit designators use their abbreviated forms. A known leading directional is extracted even when the street has no recognized suffix; the remaining street text stays literal. Numeric grid-style streets also separate their trailing directional.
 
 ### `createAddressResolver(index)`
 
@@ -410,7 +410,7 @@ The interpreter currently handles:
 - common USPS secondary-unit designators and long forms;
 - Puerto Rico `CARR` route notation;
 - hyphenated house numbers and unit-shaped tokens;
-- pre-directionals, post-directionals, and post-directionals before explicit units;
+- pre-directionals on suffixed and suffixless streets, post-directionals, numeric grid-style directionals, and post-directionals before explicit units;
 - multi-token explicit unit numbers;
 - suffixless literal streets.
 
@@ -516,6 +516,8 @@ either by silently dropping the unit, or by inventing one that did not exist.
 | `3637 Snell Ave 231`       | 2          | Bare trailing unit is surfaced, not swallowed into the street name       |
 | `100 O'Connor Ave 4`       | 2          | Apostrophes survive; normalization does not desynchronize the source text |
 | `123 N. Main St. 4`        | 2          | Multiple periods parse; pre-directional `N` is extracted                 |
+| `731 W Calle Lupa`         | 1          | Suffixless street text stays literal after pre-directional `W`           |
+| `1196 W 2325 S`            | 1          | Numeric grid street separates pre-directional `W` and post-directional `S` |
 | `123 Abbey Road 4`         | 2          | An ordinary `ROAD` suffix does not suppress the unit reading             |
 | `123 Desert Willow Loop 4` | 2          | Same for `LOOP`                                                          |
 | `123 State Spur 5`         | 2          | A route-shaped string keeps its literal reading instead of inventing a unit |
