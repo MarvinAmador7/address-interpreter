@@ -497,6 +497,90 @@ Inspect the exact npm publish allowlist:
 npm run package:files
 ```
 
+## Verified against production data
+
+Unit tests prove the interpreter behaves as specified. This section records what happened
+when the package was wired into a live property service and run against a production MLS
+dataset — real addresses, real listings, no fixtures.
+
+Resolution ran against a production MLS index. The ambiguous cases were not constructed —
+they were found by searching that index for addresses whose two readings both exist.
+
+### Parsing cases that defeat string-only approaches
+
+Each of these had previously broken a hand-rolled parser fix in the consuming service —
+either by silently dropping the unit, or by inventing one that did not exist.
+
+| Delivery line              | Candidates | What it proves                                                          |
+| -------------------------- | ---------- | ----------------------------------------------------------------------- |
+| `3637 Snell Ave 231`       | 2          | Bare trailing unit is surfaced, not swallowed into the street name       |
+| `100 O'Connor Ave 4`       | 2          | Apostrophes survive; normalization does not desynchronize the source text |
+| `123 N. Main St. 4`        | 2          | Multiple periods parse; pre-directional `N` is extracted                 |
+| `123 Abbey Road 4`         | 2          | An ordinary `ROAD` suffix does not suppress the unit reading             |
+| `123 Desert Willow Loop 4` | 2          | Same for `LOOP`                                                          |
+| `123 State Spur 5`         | 2          | A route-shaped string keeps its literal reading instead of inventing a unit |
+| `100 State Turnpike 12`    | 2          | Same for `TURNPIKE`                                                      |
+| `1200 Highway 6`           | 1          | No suffix precedes the number, so no ambiguity is manufactured           |
+| `231-B` `B231` `231-233` `12A` | 2 each | Hyphenated, letter-prefixed, range, and alphanumeric units are recognized |
+
+Normalization is stable across spellings: `EAST` and `E` produce the same candidate, as do
+`Court` and `Ct`, and `NORTHWEST` and `NW`. Quadrants stay distinct — `NW` never matches
+`NE`. Unparseable input yields zero candidates plus a diagnostic rather than a bad guess.
+
+### All four resolver outcomes, on real listings
+
+`9750 Monterey Dr` is a real building whose records exist in the feed under two different
+encodings — one as `MONTEREY` with unit `64`, another as a literal street named
+`MONTEREY DR 64` — under two different MLS listing IDs.
+
+| Delivery line           | Status      | Result                                                        |
+| ----------------------- | ----------- | ------------------------------------------------------------- |
+| `9750 Monterey Dr 64`   | `ambiguous` | Both readings matched **different** listings → refused to guess |
+| `9750 N Monterey Dr 64` | `resolved`  | The directional excludes the literal reading → one match        |
+| `9750 Monterey Dr 32`   | `resolved`  | Both readings matched the **same** listing → aliases collapsed  |
+| `48 E Bates St`         | `resolved`  | Unambiguous address, single candidate                           |
+| `3637 Snell Ave 231`    | `not-found` | Both readings parsed cleanly; neither exists in the index        |
+| `66 NEW YORK AVE NE 107`| `not-found` | The correct quadrant resolves; the wrong one matches nothing      |
+| `Lot 7`                 | `invalid`   | `missing-house-number` diagnostic                               |
+
+The third row is the subtle one. Two candidates matching is *not* ambiguity — the resolver
+compares `entityId`, so two readings of one property resolve cleanly while two readings of
+two properties fail closed. That distinction is the whole point of the `entityId` invariant.
+
+Both `9750 Monterey Dr 32` candidates really do match in the index, and both return the
+same listing, which is why the resolver collapses them. Note that this depends on the index
+returning a stable `entityId` per candidate: that address carries several listings, and the
+adapter selects the most recent. Deciding *which* row represents a candidate is the index's
+responsibility — the resolver only compares the identities it is handed.
+
+### Behavior preserved end to end
+
+Queried through the consuming service against the live index:
+
+| Delivery line                   | Resolves to        |
+| ------------------------------- | ------------------ |
+| `66 NEW YORK AVE NW APT 107`    | the same record    |
+| `66 NEW YORK AVE NW 107`        | the same record    |
+| `66 NEW YORK AVE NORTHWEST 107` | the same record    |
+| `66 NEW YORK AVE NE 107`        | no record          |
+| `6088 Knoll Park Ct`            | the same record    |
+| `6088 Knoll Park Court`         | the same record    |
+
+The bare form (`NW 107`) previously matched nothing while the keyword form resolved. Every
+accepted spelling now reaches one identical record, and the wrong quadrant still reaches
+none — the keyword, the abbreviation, and the spelled-out directional are interchangeable,
+while a genuine difference in the address is not.
+
+### What this does and does not establish
+
+It establishes that the interpreter surfaces the ambiguity real data actually contains, and
+that a resolver backed by a real index can settle it correctly in every direction — including
+the case where it must decline.
+
+It does not establish that any particular index is complete. `ambiguous` and `not-found` are
+properties of the data, not defects in the caller's address string, and applications should
+present them differently from an error.
+
 ## Compatibility
 
 | Surface              | Support                                   |
