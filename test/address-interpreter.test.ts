@@ -315,6 +315,71 @@ describe("interpretAddress", () => {
     });
   });
 
+  test.each([
+    ["Cove", "CV"],
+    ["Run", "RUN"],
+    ["Path", "PATH"],
+    ["Pass", "PASS"],
+    ["Point", "PT"],
+    ["Bend", "BND"],
+    ["Trace", "TRCE"],
+    ["Crossing", "XING"],
+    ["Park", "PARK"],
+    ["Pike", "PIKE"],
+    ["View", "VW"],
+    ["Walk", "WALK"],
+    ["Glen", "GLN"],
+    ["Creek", "CRK"],
+    ["Landing", "LNDG"],
+    ["Heights", "HTS"],
+    ["Grove", "GRV"],
+    ["Hill", "HL"],
+    ["Row", "ROW"],
+  ])("recognizes the dataset-reported USPS %s suffix", (rawSuffix, streetSuffix) => {
+    const interpretation = interpretAddress({
+      deliveryLine: `123 Main ${rawSuffix}`,
+      city: "Austin",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "MAIN",
+      streetSuffix,
+    });
+  });
+
+  test("does not absorb a directional when the street uses Cove", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "26027 S Outrider Cove",
+      city: "Test City",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      preDirectional: "S",
+      streetName: "OUTRIDER",
+      streetSuffix: "CV",
+    });
+  });
+
+  test("surfaces trailing-unit ambiguity when the street uses Crossing", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "3309 Wyndham Crossing 3176",
+      city: "Test City",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates.map((candidate) => candidate.id)).toEqual([
+      "trailing-token-as-unit",
+      "trailing-token-as-street",
+    ]);
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "WYNDHAM",
+      streetSuffix: "XING",
+      secondary: { number: "3176" },
+    });
+  });
+
   test("separates pre- and post-directionals from the street name", () => {
     const interpretation = interpretAddress({
       deliveryLine: "123 N. Main St. SW",
