@@ -1,6 +1,6 @@
 {
   "name": "@marvin-amador-7/address-interpreter",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Lossless US address interpretation with explicit ambiguity candidates and data-backed resolution.",
   "license": "MIT",
   "author": "Marvin Amador",
