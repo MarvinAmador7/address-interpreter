@@ -13,6 +13,7 @@ A parser can tell you what an address string _could_ mean. Only your property in
 This package keeps those two jobs separate:
 
 - `interpretAddress(input)` is a pure function that tokenizes a delivery line, normalizes recognized components, and returns every supported interpretation.
+- `interpretFullAddress(input)` does the same for a single string containing delivery and locality text, preserving plausible street/city boundaries as candidates.
 - `createAddressResolver(index)` asks your data adapter to look up those candidates, then returns an explicit `resolved`, `ambiguous`, `not-found`, or `invalid` result.
 
 ```text
@@ -80,6 +81,20 @@ const interpretation = interpretAddress({
 
 console.log(interpretation.candidates);
 ```
+
+When all fields arrive in one string, use the full-address interpreter:
+
+```ts
+import { interpretFullAddress } from "@marvin-amador-7/address-interpreter";
+
+const interpretation = interpretFullAddress(
+  "3637 Snell Ave 231, San Jose, CA 95136",
+);
+```
+
+It extracts locality candidates and retains the same two delivery-line readings. With no
+comma or newline, it enumerates plausible street/city boundaries rather than silently
+choosing one. Resolve the resulting candidates through your address index.
 
 The two candidates are:
 
@@ -321,9 +336,21 @@ interface AddressInput {
 function interpretAddress(input: AddressInput): AddressInterpretation;
 ```
 
-`deliveryLine` contains the primary address and optional secondary unit. Pass locality fields separately. The function does not attempt to guess where a city ends and a street begins inside one concatenated string.
+`deliveryLine` contains the primary address and optional secondary unit. Pass locality fields separately; use `interpretFullAddress` for concatenated input.
 
 The function is synchronous, deterministic, side-effect free, and returns diagnostics instead of throwing for unsupported input.
+
+### `interpretFullAddress(fullAddress)`
+
+```ts
+function interpretFullAddress(fullAddress: string): AddressInterpretation;
+```
+
+The full-address interpreter recognizes terminal US state names and abbreviations,
+five-digit ZIP Codes and ZIP+4 Codes, and comma, semicolon, colon, or newline separators.
+It parses locality-shaped suffixes from the right while running each plausible delivery
+prefix through the ordinary interpreter. Unseparated street/city boundaries appear as
+explicit candidate assumptions and are left for an address index to resolve.
 
 ### `AddressInterpretation`
 
@@ -348,6 +375,9 @@ interface AddressCandidate {
     houseNumber: SourceSpan;
     street: SourceSpan;
     secondary?: SourceSpan;
+    city?: SourceSpan;
+    state?: SourceSpan;
+    postalCode?: SourceSpan;
   };
 }
 ```
@@ -362,6 +392,9 @@ Current candidate IDs are:
 | `trailing-token-as-street` | The same trailing token remains part of the literal street. |
 
 `assumptions` records choices that are not explicit in the input. It is empty for literal and explicit-unit candidates.
+
+Full-address candidate IDs append their component spans to the underlying delivery
+candidate ID. Treat every candidate ID as opaque and do not parse it as application data.
 
 ### `AddressComponents`
 
@@ -394,9 +427,13 @@ interface AddressIndex<T> {
 }
 
 function createAddressResolver<T>(index: AddressIndex<T>): AddressResolver<T>;
+function createFullAddressResolver<T>(index: AddressIndex<T>): FullAddressResolver<T>;
 ```
 
 For valid input the resolver calls `lookupCandidates` once with the complete candidate set. This lets the adapter decide whether one batch, parallel probes, or sequential fallback is appropriate for its data source.
+
+`createFullAddressResolver` accepts a full-address string but otherwise uses the same index
+and returns the same four resolution states.
 
 ## Normalization behavior
 
@@ -413,6 +450,9 @@ The interpreter currently handles:
 - pre-directionals on suffixed and suffixless streets, post-directionals, numeric grid-style directionals, and post-directionals before explicit units;
 - multi-token explicit unit numbers;
 - suffixless literal streets.
+- full-address locality suffixes with or without delimiters;
+- US state and possession names and abbreviations;
+- five-digit ZIP Codes and ZIP+4 Codes.
 
 Normalization tables are informed by USPS Publication 28:
 
@@ -459,7 +499,7 @@ Diagnostics describe interpretation failure only. They do not assert whether an 
 - **Deliverability validation:** this is not CASS, DPV, or an authoritative USPS lookup.
 - **Geocoding:** no coordinates, parcel IDs, or spatial matching are produced.
 - **Fuzzy matching:** misspelled street names are not searched against a corpus.
-- **Locality extraction:** city, state, and postal code are not inferred from one full-address string.
+- **Authoritative locality validation:** syntactic locality candidates are produced, but city/ZIP validity must be established by an address index or postal data source.
 - **PO boxes and intersections:** these forms are not currently interpreted.
 - **International addresses:** the grammar and normalization tables target US-style delivery lines.
 - **Certainty without evidence:** ambiguous syntax remains ambiguous until an index resolves it.
@@ -474,12 +514,13 @@ The resolver assumes its adapter enforces authorization, tenant scope, and data-
 
 ## Testing
 
-The package currently carries 80 tests across the interpreter and resolver. The suite covers:
+The package currently carries 118 tests across the interpreter and resolver. The suite covers:
 
 - ambiguous bare units and route-shaped addresses;
 - explicit, numberless, attached-`#`, and multi-token secondary units;
 - punctuation, apostrophes, directionals, suffixes, and source spans;
 - suffixless streets and invalid delivery lines;
+- delimited and unseparated full addresses, full state names, and locality collisions;
 - resolved, ambiguous, not-found, and invalid resolver outcomes;
 - multiple candidate aliases that identify one entity.
 

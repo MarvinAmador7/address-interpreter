@@ -38,6 +38,9 @@ export interface AddressCandidateSourceSpans {
   houseNumber: SourceSpan;
   street: SourceSpan;
   secondary?: SourceSpan;
+  city?: SourceSpan;
+  state?: SourceSpan;
+  postalCode?: SourceSpan;
 }
 
 export interface AddressToken {
@@ -91,6 +94,10 @@ export type AddressResolution<T> =
 
 export interface AddressResolver<T> {
   resolve(input: AddressInput): Promise<AddressResolution<T>>;
+}
+
+export interface FullAddressResolver<T> {
+  resolve(fullAddress: string): Promise<AddressResolution<T>>;
 }
 
 const STREET_SUFFIXES: Readonly<Record<string, string>> = {
@@ -309,6 +316,133 @@ const DIRECTIONALS: Readonly<Record<string, string>> = {
   WEST: "W",
 };
 
+const STATE_ABBREVIATIONS = new Set([
+  "AA",
+  "AE",
+  "AK",
+  "AL",
+  "AP",
+  "AR",
+  "AS",
+  "AZ",
+  "CA",
+  "CO",
+  "CT",
+  "DC",
+  "DE",
+  "FL",
+  "FM",
+  "GA",
+  "GU",
+  "HI",
+  "IA",
+  "ID",
+  "IL",
+  "IN",
+  "KS",
+  "KY",
+  "LA",
+  "MA",
+  "MD",
+  "ME",
+  "MH",
+  "MI",
+  "MN",
+  "MO",
+  "MP",
+  "MS",
+  "MT",
+  "NC",
+  "ND",
+  "NE",
+  "NH",
+  "NJ",
+  "NM",
+  "NV",
+  "NY",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "PR",
+  "PW",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VA",
+  "VI",
+  "VT",
+  "WA",
+  "WI",
+  "WV",
+  "WY",
+]);
+
+const STATE_NAMES: Readonly<Record<string, string>> = {
+  ALABAMA: "AL",
+  ALASKA: "AK",
+  "AMERICAN SAMOA": "AS",
+  ARIZONA: "AZ",
+  ARKANSAS: "AR",
+  CALIFORNIA: "CA",
+  COLORADO: "CO",
+  CONNECTICUT: "CT",
+  DELAWARE: "DE",
+  "DISTRICT OF COLUMBIA": "DC",
+  FLORIDA: "FL",
+  "FEDERATED STATES OF MICRONESIA": "FM",
+  GEORGIA: "GA",
+  GUAM: "GU",
+  HAWAII: "HI",
+  IDAHO: "ID",
+  ILLINOIS: "IL",
+  INDIANA: "IN",
+  IOWA: "IA",
+  KANSAS: "KS",
+  KENTUCKY: "KY",
+  LOUISIANA: "LA",
+  MAINE: "ME",
+  "MARSHALL ISLANDS": "MH",
+  MARYLAND: "MD",
+  MASSACHUSETTS: "MA",
+  MICHIGAN: "MI",
+  MINNESOTA: "MN",
+  MISSISSIPPI: "MS",
+  MISSOURI: "MO",
+  MONTANA: "MT",
+  NEBRASKA: "NE",
+  NEVADA: "NV",
+  "NEW HAMPSHIRE": "NH",
+  "NEW JERSEY": "NJ",
+  "NEW MEXICO": "NM",
+  "NEW YORK": "NY",
+  "NORTH CAROLINA": "NC",
+  "NORTH DAKOTA": "ND",
+  "NORTHERN MARIANA ISLANDS": "MP",
+  OHIO: "OH",
+  OKLAHOMA: "OK",
+  OREGON: "OR",
+  PALAU: "PW",
+  PENNSYLVANIA: "PA",
+  "PUERTO RICO": "PR",
+  "RHODE ISLAND": "RI",
+  "SOUTH CAROLINA": "SC",
+  "SOUTH DAKOTA": "SD",
+  TENNESSEE: "TN",
+  TEXAS: "TX",
+  UTAH: "UT",
+  VERMONT: "VT",
+  "VIRGIN ISLANDS": "VI",
+  VIRGINIA: "VA",
+  WASHINGTON: "WA",
+  "WEST VIRGINIA": "WV",
+  WISCONSIN: "WI",
+  WYOMING: "WY",
+};
+
 function tokenize(deliveryLine: string): AddressToken[] {
   return Array.from(deliveryLine.matchAll(/#|[^\s#]+/g), (match) => ({
     raw: match[0],
@@ -334,6 +468,83 @@ function normalize(value: string | undefined): string | undefined {
 
 function span(first: AddressToken, last: AddressToken = first): SourceSpan {
   return { start: first.start, end: last.end };
+}
+
+interface TrailingState {
+  start: number;
+  end: number;
+  abbreviation: string;
+}
+
+interface LocalityShape {
+  localityEnd: number;
+  state?: TrailingState;
+  postalCodeIndex?: number;
+}
+
+function findTrailingState(
+  tokens: readonly AddressToken[],
+  end: number,
+): TrailingState | undefined {
+  const finalToken = tokens[end - 1];
+
+  if (finalToken && STATE_ABBREVIATIONS.has(finalToken.normalized)) {
+    return {
+      start: end - 1,
+      end,
+      abbreviation: finalToken.normalized,
+    };
+  }
+
+  for (let tokenCount = Math.min(4, end); tokenCount >= 1; tokenCount -= 1) {
+    const start = end - tokenCount;
+    const name = tokens
+      .slice(start, end)
+      .map((token) => token.normalized)
+      .join(" ");
+    const abbreviation = STATE_NAMES[name];
+
+    if (abbreviation) {
+      return { start, end, abbreviation };
+    }
+  }
+
+  return undefined;
+}
+
+function hasLocalitySeparator(
+  fullAddress: string,
+  left: AddressToken,
+  right: AddressToken,
+): boolean {
+  const separatorText = `${left.raw.slice(-1)}${fullAddress.slice(
+    left.end,
+    right.start,
+  )}`;
+
+  return /[,;:\n\r]/.test(separatorText);
+}
+
+function componentSpanId(componentSpan: SourceSpan | undefined): string {
+  return componentSpan
+    ? `${componentSpan.start}-${componentSpan.end}`
+    : "none";
+}
+
+function addUniqueCandidate(
+  candidates: AddressCandidate[],
+  candidateKeys: Set<string>,
+  candidate: AddressCandidate,
+): void {
+  const key = JSON.stringify({
+    components: candidate.components,
+    sourceSpans: candidate.sourceSpans,
+  });
+
+  if (!candidateKeys.has(key)) {
+    candidateKeys.add(key);
+    candidates.push(candidate);
+  }
 }
 
 export function interpretAddress(input: AddressInput): AddressInterpretation {
@@ -609,28 +820,243 @@ export function interpretAddress(input: AddressInput): AddressInterpretation {
   };
 }
 
+/**
+ * Interprets a US-style address whose delivery line and locality fields share
+ * one string. Plausible street/city boundaries are preserved as candidates;
+ * callers should use an AddressIndex to establish which candidate exists.
+ */
+export function interpretFullAddress(
+  fullAddress: string,
+): AddressInterpretation {
+  const tokens = tokenize(fullAddress);
+
+  if (!tokens[0] || !/\d/.test(tokens[0].normalized)) {
+    return { tokens, candidates: [], diagnostics: ["missing-house-number"] };
+  }
+
+  const finalToken = tokens[tokens.length - 1];
+  const postalCodeIndex =
+    finalToken && /^\d{5}(?:-\d{4})?$/.test(finalToken.normalized)
+      ? tokens.length - 1
+      : undefined;
+  const possibleState = findTrailingState(
+    tokens,
+    postalCodeIndex ?? tokens.length,
+  );
+  const hasAnySeparator = tokens.some((token, index) => {
+    const nextToken = tokens[index + 1];
+    return nextToken
+      ? hasLocalitySeparator(fullAddress, token, nextToken)
+      : false;
+  });
+
+  if (
+    postalCodeIndex === undefined &&
+    possibleState === undefined &&
+    !hasAnySeparator &&
+    tokens.length < 4
+  ) {
+    return interpretAddress({ deliveryLine: fullAddress });
+  }
+
+  const localityShapes: LocalityShape[] = [];
+
+  if (postalCodeIndex !== undefined) {
+    if (possibleState) {
+      localityShapes.push({
+        localityEnd: possibleState.start,
+        state: possibleState,
+        postalCodeIndex,
+      });
+    }
+
+    localityShapes.push({
+      localityEnd: postalCodeIndex,
+      postalCodeIndex,
+    });
+  } else {
+    if (possibleState) {
+      localityShapes.push({
+        localityEnd: possibleState.start,
+        state: possibleState,
+      });
+    }
+
+    // A trailing state-shaped token can also be part of a city or delivery
+    // line (for example, "New York"). Preserve that competing reading.
+    localityShapes.push({ localityEnd: tokens.length });
+  }
+
+  const candidates: AddressCandidate[] = [];
+  const candidateKeys = new Set<string>();
+
+  for (const localityShape of localityShapes) {
+    if (localityShape.localityEnd < 2) continue;
+
+    const separatorSplits: number[] = [];
+
+    for (let split = 2; split < localityShape.localityEnd; split += 1) {
+      if (
+        hasLocalitySeparator(
+          fullAddress,
+          tokens[split - 1],
+          tokens[split],
+        )
+      ) {
+        separatorSplits.push(split);
+      }
+    }
+
+    const splitPoints =
+      separatorSplits.length > 0
+        ? [...separatorSplits, localityShape.localityEnd]
+        : Array.from(
+            { length: localityShape.localityEnd - 1 },
+            (_, index) => index + 2,
+          );
+
+    for (const split of new Set(splitPoints)) {
+      const deliveryLastToken = tokens[split - 1];
+      if (!deliveryLastToken) continue;
+
+      const cityTokens = tokens.slice(split, localityShape.localityEnd);
+      const city = cityTokens.length
+        ? cityTokens.map((token) => token.normalized).join(" ")
+        : undefined;
+      const state = localityShape.state?.abbreviation;
+      const postalCode =
+        localityShape.postalCodeIndex === undefined
+          ? undefined
+          : tokens[localityShape.postalCodeIndex]?.normalized;
+      const deliveryInterpretation = interpretAddress({
+        deliveryLine: fullAddress.slice(0, deliveryLastToken.end),
+        city,
+        state,
+        postalCode,
+      });
+      const citySpan = cityTokens[0]
+        ? span(cityTokens[0], cityTokens[cityTokens.length - 1])
+        : undefined;
+      const stateSpan = localityShape.state
+        ? span(
+            tokens[localityShape.state.start],
+            tokens[localityShape.state.end - 1],
+          )
+        : undefined;
+      const postalCodeSpan =
+        localityShape.postalCodeIndex === undefined
+          ? undefined
+          : span(tokens[localityShape.postalCodeIndex]);
+      const boundaryWasExplicit =
+        cityTokens[0] !== undefined &&
+        hasLocalitySeparator(
+          fullAddress,
+          deliveryLastToken,
+          cityTokens[0],
+        );
+      const localityAssumptions = [
+        ...(citySpan && !boundaryWasExplicit
+          ? ["street-city-boundary-inferred"]
+          : []),
+        ...(stateSpan ? ["trailing-state-is-locality"] : []),
+        ...(postalCodeSpan ? ["trailing-postal-code-is-locality"] : []),
+      ];
+
+      for (const candidate of deliveryInterpretation.candidates) {
+        const sourceSpans: AddressCandidateSourceSpans = {
+          ...candidate.sourceSpans,
+          ...(citySpan ? { city: citySpan } : {}),
+          ...(stateSpan ? { state: stateSpan } : {}),
+          ...(postalCodeSpan ? { postalCode: postalCodeSpan } : {}),
+        };
+
+        addUniqueCandidate(candidates, candidateKeys, {
+          ...candidate,
+          id: `${candidate.id}:full:${componentSpanId(
+            sourceSpans.street,
+          )}:${componentSpanId(citySpan)}:${componentSpanId(
+            stateSpan,
+          )}:${componentSpanId(postalCodeSpan)}`,
+          assumptions: [
+            ...candidate.assumptions,
+            ...localityAssumptions,
+          ],
+          sourceSpans,
+        });
+      }
+    }
+  }
+
+  if (postalCodeIndex !== undefined) {
+    const deliveryOnlyInterpretation = interpretAddress({
+      deliveryLine: fullAddress,
+    });
+
+    for (const candidate of deliveryOnlyInterpretation.candidates) {
+      addUniqueCandidate(candidates, candidateKeys, {
+        ...candidate,
+        id: `${candidate.id}:full:${componentSpanId(
+          candidate.sourceSpans.street,
+        )}:none:none:none`,
+        assumptions: [
+          ...candidate.assumptions,
+          "trailing-locality-shaped-tokens-are-delivery-line",
+        ],
+      });
+    }
+  }
+
+  if (candidates.length === 0) {
+    const deliveryOnlyInterpretation = interpretAddress({
+      deliveryLine: fullAddress,
+    });
+    return {
+      tokens,
+      candidates: deliveryOnlyInterpretation.candidates,
+      diagnostics: deliveryOnlyInterpretation.diagnostics,
+    };
+  }
+
+  return { tokens, candidates, diagnostics: [] };
+}
+
+async function resolveInterpretation<T>(
+  interpretation: AddressInterpretation,
+  index: AddressIndex<T>,
+): Promise<AddressResolution<T>> {
+  if (interpretation.candidates.length === 0) {
+    return { status: "invalid", interpretation };
+  }
+
+  const matches = await index.lookupCandidates(interpretation.candidates);
+
+  if (new Set(matches.map((match) => match.entityId)).size > 1) {
+    return { status: "ambiguous", interpretation, matches };
+  }
+
+  if (matches[0]) {
+    return { status: "resolved", interpretation, match: matches[0] };
+  }
+
+  return { status: "not-found", interpretation };
+}
+
 export function createAddressResolver<T>(
   index: AddressIndex<T>,
 ): AddressResolver<T> {
   return {
     async resolve(input) {
-      const interpretation = interpretAddress(input);
+      return resolveInterpretation(interpretAddress(input), index);
+    },
+  };
+}
 
-      if (interpretation.candidates.length === 0) {
-        return { status: "invalid", interpretation };
-      }
-
-      const matches = await index.lookupCandidates(interpretation.candidates);
-
-      if (new Set(matches.map((match) => match.entityId)).size > 1) {
-        return { status: "ambiguous", interpretation, matches };
-      }
-
-      if (matches[0]) {
-        return { status: "resolved", interpretation, match: matches[0] };
-      }
-
-      return { status: "not-found", interpretation };
+export function createFullAddressResolver<T>(
+  index: AddressIndex<T>,
+): FullAddressResolver<T> {
+  return {
+    async resolve(fullAddress) {
+      return resolveInterpretation(interpretFullAddress(fullAddress), index);
     },
   };
 }

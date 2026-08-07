@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { interpretAddress } from "../src/index";
+import { interpretAddress, interpretFullAddress } from "../src/index";
 
 describe("interpretAddress", () => {
   test("returns one interpretation when a secondary unit is explicit", () => {
@@ -667,5 +667,159 @@ describe("interpretAddress", () => {
       streetSuffix: "ST",
     });
     expect(interpretation.candidates[0]?.components.secondary).toBeUndefined();
+  });
+});
+
+describe("interpretFullAddress", () => {
+  test("extracts comma-delimited locality fields without collapsing delivery ambiguity", () => {
+    const interpretation = interpretFullAddress(
+      "3637 Snell Ave 231, San Jose, CA 95136",
+    );
+    const localityCandidates = interpretation.candidates.filter(
+      ({ components }) =>
+        components.city === "SAN JOSE" &&
+        components.state === "CA" &&
+        components.postalCode === "95136",
+    );
+
+    expect(
+      localityCandidates.map(({ components }) => ({
+        streetName: components.streetName,
+        streetSuffix: components.streetSuffix,
+        secondary: components.secondary,
+      })),
+    ).toEqual([
+      {
+        streetName: "SNELL",
+        streetSuffix: "AVE",
+        secondary: { number: "231" },
+      },
+      {
+        streetName: "SNELL AVE 231",
+        streetSuffix: undefined,
+        secondary: undefined,
+      },
+    ]);
+    expect(localityCandidates[0]?.sourceSpans).toMatchObject({
+      city: { start: 20, end: 29 },
+      state: { start: 30, end: 32 },
+      postalCode: { start: 33, end: 38 },
+    });
+    expect(localityCandidates[0]?.assumptions).not.toContain(
+      "street-city-boundary-inferred",
+    );
+  });
+
+  test("infers an unseparated street-city boundary as a candidate", () => {
+    const interpretation = interpretFullAddress(
+      "123 Main St Austin TX 78701",
+    );
+    const candidate = interpretation.candidates.find(
+      ({ components }) =>
+        components.streetName === "MAIN" &&
+        components.streetSuffix === "ST" &&
+        components.city === "AUSTIN" &&
+        components.state === "TX" &&
+        components.postalCode === "78701",
+    );
+
+    expect(candidate).toBeDefined();
+    expect(candidate?.assumptions).toContain("street-city-boundary-inferred");
+    expect(candidate?.sourceSpans).toMatchObject({
+      city: { start: 12, end: 18 },
+      state: { start: 19, end: 21 },
+      postalCode: { start: 22, end: 27 },
+    });
+  });
+
+  test("normalizes a full state name while preserving a multi-token city", () => {
+    const interpretation = interpretFullAddress(
+      "123 Main St New York New York 10001",
+    );
+
+    expect(
+      interpretation.candidates.some(
+        ({ components }) =>
+          components.streetName === "MAIN" &&
+          components.streetSuffix === "ST" &&
+          components.city === "NEW YORK" &&
+          components.state === "NY" &&
+          components.postalCode === "10001",
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps New York as either a city or a state when no postal code settles it", () => {
+    const interpretation = interpretFullAddress("123 Main St New York");
+
+    expect(
+      interpretation.candidates.some(
+        ({ components }) =>
+          components.streetName === "MAIN" &&
+          components.streetSuffix === "ST" &&
+          components.city === "NEW YORK" &&
+          components.state === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      interpretation.candidates.some(
+        ({ components }) =>
+          components.streetName === "MAIN" &&
+          components.streetSuffix === "ST" &&
+          components.city === undefined &&
+          components.state === "NY",
+      ),
+    ).toBe(true);
+  });
+
+  test("uses a newline as explicit city-boundary evidence", () => {
+    const interpretation = interpretFullAddress("123 Main St\nAustin");
+    const candidate = interpretation.candidates.find(
+      ({ components }) => components.city === "AUSTIN",
+    );
+
+    expect(candidate?.components).toMatchObject({
+      houseNumber: "123",
+      streetName: "MAIN",
+      streetSuffix: "ST",
+      city: "AUSTIN",
+    });
+    expect(candidate?.assumptions).not.toContain(
+      "street-city-boundary-inferred",
+    );
+  });
+
+  test("leaves an ordinary delivery line unchanged", () => {
+    const interpretation = interpretFullAddress("123 Main St");
+
+    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates[0]?.id).toBe("literal");
+    expect(interpretation.candidates[0]?.components).toEqual({
+      houseNumber: "123",
+      streetName: "MAIN",
+      streetSuffix: "ST",
+      city: undefined,
+      state: undefined,
+      postalCode: undefined,
+    });
+  });
+
+  test("keeps a postal-shaped trailing token as a possible unit", () => {
+    const interpretation = interpretFullAddress("123 Main St 95136");
+
+    expect(
+      interpretation.candidates.some(
+        ({ components }) =>
+          components.postalCode === "95136" &&
+          components.secondary === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      interpretation.candidates.some(
+        ({ components }) =>
+          components.postalCode === undefined &&
+          components.secondary?.number === "95136",
+      ),
+    ).toBe(true);
   });
 });
