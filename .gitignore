@@ -2,3 +2,13 @@ dist/
 node_modules/
 *.tgz
 .DS_Store
+
+# Local corpus evaluation harness
+/scripts/corpus/
+
+# Corpus validation (scripts/corpus). Corpora are consumer datasets containing
+# real addresses — they must never be committed, and neither may the reports
+# derived from them, which quote those addresses verbatim.
+*.csv
+corpus-categories.txt
+corpus-regressions.txt

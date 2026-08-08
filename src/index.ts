@@ -728,35 +728,109 @@ export function interpretAddress(input: AddressInput): AddressInterpretation {
       ? tokens.length - 1
       : tokens.length;
 
+    const literalCandidate: AddressCandidate = {
+      id: "literal",
+      assumptions: [],
+      sourceSpans: {
+        houseNumber: span(tokens[0]),
+        street: span(tokens[1], tokens[tokens.length - 1]),
+      },
+      components: {
+        houseNumber: tokens[0].normalized,
+        ...(fallbackPreDirectional
+          ? { preDirectional: fallbackPreDirectional }
+          : {}),
+        streetName: tokens
+          .slice(fallbackStreetNameStart, fallbackStreetNameEnd)
+          .map((token) => token.normalized)
+          .join(" "),
+        ...(fallbackPostDirectional
+          ? { postDirectional: fallbackPostDirectional }
+          : {}),
+        city: normalize(input.city),
+        state: normalize(input.state),
+        postalCode: normalize(input.postalCode),
+      },
+    };
+
+    // No suffix anchors the street, but an explicit unit keyword still marks
+    // everything after it as the unit. Both readings survive as candidates;
+    // the keyword never has to be part of the street for the line to resolve,
+    // and the index settles which reading exists. Designators that take no
+    // number (FRNT, REAR, ...) only qualify at the end of the line: "Ocean
+    // Front 5" is a street, not a numbered front unit.
+    for (let index = 2; index < tokens.length; index += 1) {
+      const keywordDesignator = UNIT_DESIGNATORS[tokens[index].normalized];
+      if (!keywordDesignator) continue;
+
+      const keywordNumberTokens = tokens.slice(index + 1);
+      const keywordNumber = keywordNumberTokens
+        .map((token) => token.normalized)
+        .join(" ");
+
+      if (UNIT_DESIGNATORS_WITHOUT_NUMBER.has(keywordDesignator)) {
+        if (keywordNumberTokens.length > 0) continue;
+      } else if (!keywordNumber) {
+        continue;
+      }
+
+      const keywordPostDirectional =
+        index > 2 ? DIRECTIONALS[tokens[index - 1].normalized] : undefined;
+      const keywordStreetNameEnd = keywordPostDirectional ? index - 1 : index;
+      const keywordPreDirectional =
+        keywordStreetNameEnd > 2 ? DIRECTIONALS[tokens[1].normalized] : undefined;
+      const keywordStreetNameStart = keywordPreDirectional ? 2 : 1;
+
+      return {
+        tokens,
+        diagnostics: [],
+        candidates: [
+          {
+            id: "unit-keyword-as-unit",
+            assumptions: ["unit-keyword-is-unit"],
+            sourceSpans: {
+              houseNumber: span(tokens[0]),
+              street: span(tokens[1], tokens[index - 1]),
+              secondary: span(
+                tokens[index],
+                keywordNumberTokens[keywordNumberTokens.length - 1] ??
+                  tokens[index],
+              ),
+            },
+            components: {
+              houseNumber: tokens[0].normalized,
+              ...(keywordPreDirectional
+                ? { preDirectional: keywordPreDirectional }
+                : {}),
+              streetName: tokens
+                .slice(keywordStreetNameStart, keywordStreetNameEnd)
+                .map((token) => token.normalized)
+                .join(" "),
+              ...(keywordPostDirectional
+                ? { postDirectional: keywordPostDirectional }
+                : {}),
+              secondary: {
+                designator: keywordDesignator,
+                ...(keywordNumber ? { number: keywordNumber } : {}),
+              },
+              city: normalize(input.city),
+              state: normalize(input.state),
+              postalCode: normalize(input.postalCode),
+            },
+          },
+          {
+            ...literalCandidate,
+            id: "unit-keyword-as-street",
+            assumptions: ["unit-keyword-is-street"],
+          },
+        ],
+      };
+    }
+
     return {
       tokens,
       diagnostics: [],
-      candidates: [
-        {
-          id: "literal",
-          assumptions: [],
-          sourceSpans: {
-            houseNumber: span(tokens[0]),
-            street: span(tokens[1], tokens[tokens.length - 1]),
-          },
-          components: {
-            houseNumber: tokens[0].normalized,
-            ...(fallbackPreDirectional
-              ? { preDirectional: fallbackPreDirectional }
-              : {}),
-            streetName: tokens
-              .slice(fallbackStreetNameStart, fallbackStreetNameEnd)
-              .map((token) => token.normalized)
-              .join(" "),
-            ...(fallbackPostDirectional
-              ? { postDirectional: fallbackPostDirectional }
-              : {}),
-            city: normalize(input.city),
-            state: normalize(input.state),
-            postalCode: normalize(input.postalCode),
-          },
-        },
-      ],
+      candidates: [literalCandidate],
     };
   }
 
