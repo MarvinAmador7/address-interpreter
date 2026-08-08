@@ -654,6 +654,149 @@ describe("interpretAddress", () => {
     },
   );
 
+  test("splits an explicit unit keyword from a suffixless street", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "1360 Ashford Apt 702",
+      city: "San Juan",
+      state: "PR",
+      postalCode: "00907",
+    });
+
+    expect(
+      interpretation.candidates.map(({ id, assumptions, components }) => ({
+        id,
+        assumptions,
+        components,
+      })),
+    ).toEqual([
+      {
+        id: "unit-keyword-as-unit",
+        assumptions: ["unit-keyword-is-unit"],
+        components: {
+          houseNumber: "1360",
+          streetName: "ASHFORD",
+          secondary: { designator: "APT", number: "702" },
+          city: "SAN JUAN",
+          state: "PR",
+          postalCode: "00907",
+        },
+      },
+      {
+        id: "unit-keyword-as-street",
+        assumptions: ["unit-keyword-is-street"],
+        components: {
+          houseNumber: "1360",
+          streetName: "ASHFORD APT 702",
+          city: "SAN JUAN",
+          state: "PR",
+          postalCode: "00907",
+        },
+      },
+    ]);
+    expect(interpretation.candidates[0]?.sourceSpans).toEqual({
+      houseNumber: { start: 0, end: 4 },
+      street: { start: 5, end: 12 },
+      secondary: { start: 13, end: 20 },
+    });
+  });
+
+  test.each([
+    ["305 E 51st Apt 19A", "E", "51ST", "APT", "19A", "51ST APT 19A"],
+    ["11 Wordsworth Unit 1", undefined, "WORDSWORTH", "UNIT", "1", "WORDSWORTH UNIT 1"],
+    ["1360 Ashford #702", undefined, "ASHFORD", "#", "702", "ASHFORD # 702"],
+  ])(
+    "rescues the suffixless street in %s via its unit keyword",
+    (deliveryLine, preDirectional, streetName, designator, number, literalStreetName) => {
+      const interpretation = interpretAddress({
+        deliveryLine,
+        city: "Test City",
+        state: "TX",
+      });
+
+      expect(interpretation.candidates.map((candidate) => candidate.id)).toEqual([
+        "unit-keyword-as-unit",
+        "unit-keyword-as-street",
+      ]);
+      expect(interpretation.candidates[0]?.components).toMatchObject({
+        streetName,
+        secondary: { designator, number },
+        ...(preDirectional ? { preDirectional } : {}),
+      });
+      expect(
+        interpretation.candidates[0]?.components.streetSuffix,
+      ).toBeUndefined();
+      expect(interpretation.candidates[1]?.components.streetName).toBe(
+        literalStreetName,
+      );
+      expect(interpretation.candidates[1]?.components.secondary).toBeUndefined();
+    },
+  );
+
+  test("separates a post-directional before a suffixless unit keyword", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "100 Main N Apt 5",
+      city: "Test City",
+      state: "TX",
+    });
+
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "MAIN",
+      postDirectional: "N",
+      secondary: { designator: "APT", number: "5" },
+    });
+  });
+
+  test("does not infer a unit from a bare trailing number without a keyword", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "1360 Ashford 702",
+      city: "San Juan",
+      state: "PR",
+      postalCode: "00907",
+    });
+
+    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      houseNumber: "1360",
+      streetName: "ASHFORD 702",
+    });
+    expect(interpretation.candidates[0]?.components.secondary).toBeUndefined();
+  });
+
+  test("keeps both readings of a bare trailing number after an apostrophe street", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "100 O'Connor Ave 4",
+      city: "San Jose",
+      state: "CA",
+    });
+
+    expect(interpretation.candidates.map((candidate) => candidate.id)).toEqual([
+      "trailing-token-as-unit",
+      "trailing-token-as-street",
+    ]);
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "O'CONNOR",
+      streetSuffix: "AVE",
+      secondary: { number: "4" },
+    });
+    expect(interpretation.candidates[1]?.components).toMatchObject({
+      streetName: "O'CONNOR AVE 4",
+    });
+  });
+
+  test("keeps a numberless designator word inside a suffixless street name", () => {
+    const interpretation = interpretAddress({
+      deliveryLine: "123 Ocean Front 5",
+      city: "Venice",
+      state: "CA",
+    });
+
+    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates[0]?.components).toMatchObject({
+      streetName: "OCEAN FRONT 5",
+    });
+    expect(interpretation.candidates[0]?.components.secondary).toBeUndefined();
+  });
+
   test("does not treat a unit keyword inside the street name as a designator", () => {
     const interpretation = interpretAddress({
       deliveryLine: "123 Unit St",
