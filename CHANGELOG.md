@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/MarvinAmador7/address-interpreter/compare/v0.2.0...v0.2.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* split explicit unit keywords from suffixless streets ([#13](https://github.com/MarvinAmador7/address-interpreter/issues/13)) ([272ca49](https://github.com/MarvinAmador7/address-interpreter/commit/272ca49498620a27ba88f16d5ae9777303098026))
+
 ## [0.2.0](https://github.com/MarvinAmador7/address-interpreter/compare/v0.1.5...v0.2.0) (2026-08-07)
 
 
