@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/MarvinAmador7/address-interpreter/compare/v0.2.1...v0.3.0) (2026-10-08)
+
+
+### Features
+
+* expand address interpretation and add research workflows ([334190b](https://github.com/MarvinAmador7/address-interpreter/commit/334190bde556c2964d91f620e01f47b3a6951a96))
+
 ## [0.2.1](https://github.com/MarvinAmador7/address-interpreter/compare/v0.2.0...v0.2.1) (2026-08-08)
 
 
