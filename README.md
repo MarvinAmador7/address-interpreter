@@ -1,329 +1,66 @@
 # `@marvin-amador-7/address-interpreter`
 
-[![npm version](https://img.shields.io/npm/v/%40marvin-amador-7%2Faddress-interpreter.svg)](https://www.npmjs.com/package/@marvin-amador-7/address-interpreter)
-[![CI](https://github.com/MarvinAmador7/address-interpreter/actions/workflows/ci.yml/badge.svg)](https://github.com/MarvinAmador7/address-interpreter/actions/workflows/ci.yml)
-[![license: MIT](https://img.shields.io/npm/l/%40marvin-amador-7%2Faddress-interpreter.svg)](./LICENSE)
-[![Node.js 18+](https://img.shields.io/badge/Node.js-%3E%3D18-339933?logo=node.js&logoColor=white)](./package.json)
-[![TypeScript](https://img.shields.io/badge/TypeScript-types_included-3178C6?logo=typescript&logoColor=white)](./src/index.ts)
-
-**Ambiguity-preserving US address interpretation for systems where a wrong match is worse than no match.**
-
-A parser can tell you what an address string _could_ mean. Only your property index, customer database, or authoritative address source can tell you which meaning actually exists.
-
-This package keeps those two jobs separate:
-
-- `interpretAddress(input)` is a pure function that tokenizes a delivery line, normalizes recognized components, and returns every supported interpretation.
-- `interpretFullAddress(input)` does the same for a single string containing delivery and locality text, preserving plausible street/city boundaries as candidates.
-- `createAddressResolver(index)` asks your data adapter to look up those candidates, then returns an explicit `resolved`, `ambiguous`, `not-found`, or `invalid` result.
-
-```text
-raw delivery line
-       │
-       ▼
-lossless tokens + source spans
-       │
-       ▼
-one or more address candidates
-       │
-       ▼
-your AddressIndex adapter ──► database / search index / vendor
-       │
-       ▼
-resolved | ambiguous | not-found | invalid
-```
-
-The module has no runtime dependencies, performs no I/O, and ships ESM, CommonJS, and TypeScript declarations.
-
-## Why this exists
-
-Consider this production-shaped input:
-
-```text
-3637 Snell Ave 231
-```
-
-It has at least two valid structural readings:
-
-1. House `3637`, street `SNELL AVE`, secondary unit `231`.
-2. House `3637`, literal street name `SNELL AVE 231`, no secondary unit.
-
-The strings are structurally indistinguishable. A larger denylist, a greedier regular expression, or a route-name heuristic can only move the error somewhere else.
-
-That matters because a confident parser can turn an address miss into a query for the wrong property. In property, identity, billing, and compliance systems, an explicit ambiguous result is often safer than silently returning another entity.
-
-`@marvin-amador-7/address-interpreter` therefore follows one rule:
-
-> Preserve plausible meanings during interpretation. Resolve them only with evidence from real data.
-
-## Installation
+US address interpretation with source offsets, explicit ambiguity candidates, and resolution through your own address index. No runtime dependencies or network calls. ESM, CommonJS, and TypeScript declarations are included. Runtime support starts at Node.js 18.
 
 ```sh
 npm install @marvin-amador-7/address-interpreter
 ```
 
-```sh
-yarn add @marvin-amador-7/address-interpreter
-```
-
-Node.js 18 or newer is required.
-
-## Quick start
-
 ```ts
-import { interpretAddress } from "@marvin-amador-7/address-interpreter";
+import { interpretAddress, interpretFullAddress } from "@marvin-amador-7/address-interpreter";
 
-const interpretation = interpretAddress({
-  deliveryLine: "3637 Snell Ave 231",
-  city: "San Jose",
-  state: "CA",
-  postalCode: "95136",
+const delivery = interpretAddress({
+  deliveryLine: "123 Main St B",
+  city: "Austin",
+  state: "Texas",
+  postalCode: "78701",
 });
+// Includes MAIN ST, unit B, and the literal street MAIN ST B.
 
-console.log(interpretation.candidates);
+const full = interpretFullAddress("PO Box 123, Boston, MA 02108");
+// components: { kind: "po-box", boxNumber: "123", city: "BOSTON", ... }
 ```
 
-When all fields arrive in one string, use the full-address interpreter:
+A string can describe several addresses. `123 Highway 6` can contain a street named `HIGHWAY 6` or a street named `HIGHWAY` and unit `6`. Directional words, street/city boundaries, and house-number ranges create similar ambiguity. Candidates record supported readings; an address index determines which ones exist. Candidate order is not a confidence ranking.
 
-```ts
-import { interpretFullAddress } from "@marvin-amador-7/address-interpreter";
+## Supported input
 
-const interpretation = interpretFullAddress(
-  "3637 Snell Ave 231, San Jose, CA 95136",
-);
-```
+| Format | Examples |
+| --- | --- |
+| Street addresses | `123 Main Street`, `10 Via Del Paradiso` |
+| Fractional numbers | `123 1/2 Main St`, `123½ Main St` |
+| Hyphenated and alphanumeric numbers | `123-45 Main St`, `123-A Main St`, `12N345 Main St` |
+| Compound grid numbers | `N112W16500 Main Rd`, `W123 N456 Main Rd` |
+| Numeric house ranges | `123/125 Main St`, `123 125 Main St` |
+| Explicit units | `123 Main St Apt 4`, `123 Broadway #4`, `123 Main St PMB 42` |
+| Secondary chains | `123 Main St Bldg A Apt 4` |
+| Towers and leading secondary phrases | `123 Main St Bldg 2 Tower East Apt 4`, `Apt 4 123 Main St` |
+| Compound building/unit candidates | `123 Main St 3-204` retains `3-204` and offers building `3`, unit `204` |
+| Named and compound units | `123 Main St Apt PH`, `123 Main St # A#4` |
+| Reversed floor notation | `123 Main St 2nd Floor`, `123 Main St First Floor` |
+| Bare unit candidates | `123 Main St B`, `123 Broadway 4B`, `123 Main St 4/5` |
+| Multi-token bare units | `123 Main St WH 2255`, `123 Main St 4 B` |
+| Feed formatting alternatives | `123 Oak Rd Road`, `123 Main St4B`, `123 Main St Apt4`, `123 - 125 Main St` |
+| Highway-name expansions | `123 County Rd 7`, `123 US Hwy 8`, `123 CR 8` |
+| PO boxes | `PO Box 123`, `P.O. Box 123`, `Post Office Box 123` |
+| Rural and highway-contract routes | `RR 2 Box 152`, `HC 68 Box 23A` |
+| Military delivery lines | `PSC 123 Box 4567`, `UNIT 4 BOX 12`, `CMR 2 BOX 9` |
+| General Delivery | `General Delivery, Nome, AK 99762` |
+| Puerto Rico urbanization lines | `URB Las Flores\n150 Calle A\nSan Juan PR 00926` |
 
-It extracts locality candidates and retains the same two delivery-line readings. With no
-comma or newline, it enumerates plausible street/city boundaries rather than silently
-choosing one. Resolve the resulting candidates through your address index.
+Known suffixes normalize using the 206 primary forms in USPS Appendix C1 and their listed aliases. `CARR` is also recognized. Unknown street text is preserved. Directionals include single words, abbreviations, and two-word combinations such as `North East`.
 
-The two candidates are:
+Feed repairs add candidates for repeated equivalent suffixes, joined suffix/unit markers, spaces inside house numbers, and abbreviated route names. The original reading remains when it parses. A two-part unit such as `4 B` also has a `4B` alternative. Alphanumeric unit punctuation can have alternatives such as `4-B`; the original identifier remains available. House-number hyphens and numeric unit ranges are preserved. Two different suffixes, as in `Oak Court Road`, remain street name plus suffix.
 
-```ts
-[
-  {
-    id: "trailing-token-as-unit",
-    assumptions: ["trailing-token-is-unit"],
-    sourceSpans: {
-      houseNumber: { start: 0, end: 4 },
-      street: { start: 5, end: 14 },
-      secondary: { start: 15, end: 18 },
-    },
-    components: {
-      houseNumber: "3637",
-      streetName: "SNELL",
-      streetSuffix: "AVE",
-      secondary: { number: "231" },
-      city: "SAN JOSE",
-      state: "CA",
-      postalCode: "95136",
-    },
-  },
-  {
-    id: "trailing-token-as-street",
-    assumptions: ["trailing-token-is-street"],
-    sourceSpans: {
-      houseNumber: { start: 0, end: 4 },
-      street: { start: 5, end: 18 },
-    },
-    components: {
-      houseNumber: "3637",
-      streetName: "SNELL AVE 231",
-      city: "SAN JOSE",
-      state: "CA",
-      postalCode: "95136",
-    },
-  },
-];
-```
+Additional candidates cover numbered-street spellings, saint/mount/fort abbreviations, apostrophes, repeated directionals and identifiers, and short units placed before a street suffix. `Tower` is an informal secondary marker and can also remain part of a street name. A compound building/unit interpretation requires an observed hyphen and does not replace an existing explicit chain. All such readings record assumptions. They are possible interpretations, not corrections or confirmed aliases.
 
-Use `candidate.id` to identify a candidate. Do not depend on array position as a business rule.
+Name words can have abbreviation alternatives, such as `Rocky Pt` and `Rocky Point`. When a suffix establishes the name boundary, common name-forming words also support one space change, such as `Lakeview Road` and `Lake View Road`. These alternatives preserve the original spelling, source spans, house number and secondary chain. They do not select a registered spelling, and the additional candidates can increase ambiguity and lookup cost.
 
-## Lossless tokens and source spans
+`interpretFullAddress` handles commas without surrounding spaces, semicolons, colons, newlines, full state names, state/territory and military abbreviations, ZIP Codes, ZIP+4, nine-digit ZIP strings, and terminal US country labels. Unseparated boundaries remain candidates. Separate apartment lines can belong to the delivery address. City names such as `Key West` and `Front Royal` retain their locality reading despite unit-keyword collisions.
 
-Normalization should not destroy the evidence that produced it. Every interpretation includes the original delivery-line tokens:
+These are syntactic interpretations. The library does not assert deliverability, validate city/ZIP relationships, correct missing or misspelled street names, or infer a unit absent from the input. Intersections, arbitrary recipient/company lines, dual street-and-PO-box mailing blocks, and Puerto Rico kilometer-only rural descriptions do not have dedicated grammars. The generic literal fallback can retain unsupported text; a candidate is not proof that its format or address is valid.
 
-```ts
-const result = interpretAddress({
-  deliveryLine: "123-45 O'Connor Ave #231",
-});
-
-result.tokens;
-// [
-//   { raw: "123-45",  normalized: "123-45",  start: 0,  end: 6  },
-//   { raw: "O'Connor", normalized: "O'CONNOR", start: 7,  end: 15 },
-//   { raw: "Ave",     normalized: "AVE",     start: 16, end: 19 },
-//   { raw: "#",       normalized: "#",       start: 20, end: 21 },
-//   { raw: "231",     normalized: "231",     start: 21, end: 24 },
-// ]
-```
-
-Source spans are zero-based, end-exclusive JavaScript string offsets into `deliveryLine`. They make it possible to:
-
-- highlight the exact text behind a candidate;
-- audit normalization decisions;
-- attach confidence or provenance outside this module;
-- build correction interfaces without reconstructing the original input.
-
-## Explicit secondary units
-
-An explicit designator produces one candidate because the string itself carries the evidence:
-
-```ts
-interpretAddress({
-  deliveryLine: "100 O'Connor Ave. Apt. 4",
-  city: "San Jose",
-  state: "CA",
-}).candidates[0].components;
-
-// {
-//   houseNumber: "100",
-//   streetName: "O'CONNOR",
-//   streetSuffix: "AVE",
-//   secondary: { designator: "APT", number: "4" },
-//   city: "SAN JOSE",
-//   state: "CA",
-//   postalCode: undefined,
-// }
-```
-
-Multi-token explicit unit numbers are preserved:
-
-```text
-123 Main St Apt 231 B
-                    └── secondary: { designator: "APT", number: "231 B" }
-```
-
-Approved numberless forms such as `BASEMENT`, `FRONT`, `LOBBY`, `LOWER`, `OFFICE`, `PENTHOUSE`, `REAR`, `SIDE`, and `UPPER` are also recognized.
-
-## Bare trailing unit-shaped tokens
-
-A bare trailing token becomes ambiguous only when all of the following are true:
-
-- the delivery line contains at least four tokens;
-- a recognized street suffix precedes the trailing token, with an optional post-directional between them;
-- the trailing token contains at least one digit;
-- the trailing token contains only letters, digits, and internal hyphens.
-
-Supported shapes include:
-
-```text
-231
-231-B
-B231
-231-233
-```
-
-The interpreter does **not** choose the unit meaning. It returns the unit and literal-street candidates together.
-
-That same rule intentionally applies to route-shaped strings:
-
-| Delivery line           | Candidate 1             | Candidate 2                 |
-| ----------------------- | ----------------------- | --------------------------- |
-| `123 Abbey Road 4`      | `ABBEY RD`, unit `4`    | literal `ABBEY ROAD 4`      |
-| `123 State Spur 5`      | `STATE SPUR`, unit `5`  | literal `STATE SPUR 5`      |
-| `100 State Turnpike 12` | `STATE TPKE`, unit `12` | literal `STATE TURNPIKE 12` |
-| `123 Old Highway 12`    | `OLD HWY`, unit `12`    | literal `OLD HIGHWAY 12`    |
-| `123 PR Carr 2`         | `PR CARR`, unit `2`     | literal `PR CARR 2`         |
-
-No finite route-designator denylist can prove which row exists in your data. That is the resolver's job.
-
-## Resolve candidates with real data
-
-Implement the small `AddressIndex<T>` interface at the seam where your application talks to its source of truth:
-
-```ts
-import {
-  createAddressResolver,
-  type AddressCandidate,
-  type AddressIndex,
-  type AddressMatch,
-} from "@marvin-amador-7/address-interpreter";
-
-interface PropertyRecord {
-  propertyId: string;
-  address: string;
-}
-
-declare function findProperty(
-  candidate: AddressCandidate,
-): Promise<PropertyRecord | undefined>;
-
-const propertyIndex: AddressIndex<PropertyRecord> = {
-  async lookupCandidates(candidates) {
-    const possibleMatches = await Promise.all(
-      candidates.map(async (candidate) => {
-        const property = await findProperty(candidate);
-
-        if (!property) return undefined;
-
-        return {
-          candidateId: candidate.id,
-          entityId: property.propertyId,
-          value: property,
-        } satisfies AddressMatch<PropertyRecord>;
-      }),
-    );
-
-    return possibleMatches.filter(
-      (match): match is AddressMatch<PropertyRecord> => match !== undefined,
-    );
-  },
-};
-
-const resolver = createAddressResolver(propertyIndex);
-
-const resolution = await resolver.resolve({
-  deliveryLine: "123 State Spur 5",
-  city: "Houston",
-  state: "TX",
-  postalCode: "77001",
-});
-
-switch (resolution.status) {
-  case "resolved":
-    console.log(resolution.match.value);
-    break;
-  case "ambiguous":
-    console.error("Candidates matched different properties");
-    break;
-  case "not-found":
-    console.log("No candidate matched");
-    break;
-  case "invalid":
-    console.error(resolution.interpretation.diagnostics);
-    break;
-}
-```
-
-Your adapter may query candidates in parallel, translate them to vendor-specific fields, batch them into one SQL statement, or look them up from a precomputed key table. The package deliberately knows nothing about your storage architecture.
-
-### The `entityId` invariant
-
-`entityId` is the resolver's proof of identity. Treat it as a correctness-critical field.
-
-- One matching entity ID resolves.
-- Several candidate matches with the same entity ID resolve as aliases of one entity.
-- Matches with different entity IDs return `ambiguous`.
-- If your data source cannot prove two matches are the same entity, give them distinct IDs and fail closed.
-
-When aliases share an `entityId`, the resolver returns the first match's `value`. Your adapter must therefore ensure that the same `entityId` always means the same interchangeable entity.
-
-Do not derive identity from incidental data such as a photo URL, display address, owner name, or normalized street string.
-
-## Resolution states
-
-| Status      | Meaning                                                               | Is the index called? |
-| ----------- | --------------------------------------------------------------------- | -------------------- |
-| `resolved`  | At least one match exists and every match identifies the same entity. | Yes                  |
-| `ambiguous` | Candidate matches identify more than one entity.                      | Yes                  |
-| `not-found` | The input produced candidates, but none matched.                      | Yes                  |
-| `invalid`   | The input could not produce a candidate.                              | No                   |
-
-Infrastructure errors from your adapter are not converted into `not-found`. They reject normally so callers can distinguish an unavailable index from a genuine miss.
-
-## Interface reference
-
-### `interpretAddress(input)`
+## Public API and migration
 
 ```ts
 interface AddressInput {
@@ -331,339 +68,252 @@ interface AddressInput {
   city?: string;
   state?: string;
   postalCode?: string;
+  urbanization?: string;
 }
 
-function interpretAddress(input: AddressInput): AddressInterpretation;
-```
-
-`deliveryLine` contains the primary address and optional secondary unit. Pass locality fields separately; use `interpretFullAddress` for concatenated input.
-
-The function is synchronous, deterministic, side-effect free, and returns diagnostics instead of throwing for unsupported input.
-
-### `interpretFullAddress(fullAddress)`
-
-```ts
-function interpretFullAddress(fullAddress: string): AddressInterpretation;
-```
-
-The full-address interpreter recognizes terminal US state names and abbreviations,
-five-digit ZIP Codes and ZIP+4 Codes, and comma, semicolon, colon, or newline separators.
-It parses locality-shaped suffixes from the right while running each plausible delivery
-prefix through the ordinary interpreter. Unseparated street/city boundaries appear as
-explicit candidate assumptions and are left for an address index to resolve.
-
-### `AddressInterpretation`
-
-```ts
-interface AddressInterpretation {
-  tokens: readonly AddressToken[];
-  candidates: readonly AddressCandidate[];
-  diagnostics: readonly AddressDiagnostic[];
+interface AddressInterpretationOptions {
+  spellingAlternatives?: boolean; // defaults to true
 }
+
+interpretAddress(input: AddressInput, options?: AddressInterpretationOptions): AddressInterpretation;
+interpretFullAddress(fullAddress: string, options?: AddressInterpretationOptions): AddressInterpretation;
 ```
 
-An ordinary supported address normally has one candidate. A bare trailing unit-shaped token may produce two. Invalid input has no candidates and at least one diagnostic.
+Structured locality fields normalize whitespace and case. Known full state names become abbreviations. Nine-digit postal codes become ZIP+4 strings. Supplied locality fields remain unvalidated evidence.
 
-### `AddressCandidate`
+Pass `{ spellingAlternatives: false }` to skip alternative street/route spellings and secondary identifier spacing/punctuation. Suffix and directional normalization, structural ambiguity, feed repairs, and building/unit chain interpretations remain enabled. For example, `123 Lakeview Dr Unit A-204` retains `LAKEVIEW` and the opaque `A-204` identifier, plus its possible building/unit split; it does not add `LAKE VIEW` or `A204`. Both modes preserve source tokens and spans. Candidate order is unranked in both modes.
+
+Existing calls keep spelling alternatives enabled. Resolver factories also retain the full default candidate set. Disabling spelling alternatives deliberately reduces possible readings and can reduce MLS agreement; it does not make the remaining readings authoritative.
+
+This expansion changes the TypeScript component contract and broadens candidate sets. Adapters written for the street-only API need a review before upgrading:
+
+- `AddressComponents` is now a union. Street candidates retain their existing shape and omit `kind`; non-street candidates have an explicit `kind` and no house/street fields. Use `StreetAddressComponents` where a street-specific type is required.
+- `sourceSpans.houseNumber` and `sourceSpans.street` are optional. Non-street addresses expose `delivery`, `boxNumber`, and `routeNumber` spans where applicable.
+- Candidate IDs are opaque and unique within an interpretation. Their spelling and candidate counts can change as supported readings expand.
+- Bare alphabetic and suffixless units, directional names, and separated numeric house ranges now produce alternatives. Always pass the entire candidate set to the index.
+- Invalid adapter evidence throws `TypeError`. Infrastructure errors still propagate normally.
+- Multiple secondary components appear in `secondaryUnits` in input order. `secondary` is the last component, for compatibility with single-unit consumers. An adapter **must match the complete chain when present**; matching only the last unit can confuse apartments in different buildings.
 
 ```ts
-interface AddressCandidate {
-  id: string;
-  components: AddressComponents;
-  assumptions: readonly string[];
-  sourceSpans: {
-    houseNumber: SourceSpan;
-    street: SourceSpan;
-    secondary?: SourceSpan;
-    city?: SourceSpan;
-    state?: SourceSpan;
-    postalCode?: SourceSpan;
-  };
+import type { AddressCandidate } from "@marvin-amador-7/address-interpreter";
+
+function lookup(candidate: AddressCandidate) {
+  const c = candidate.components;
+  if (c.kind === undefined || c.kind === "street") {
+    // houseNumber and streetName are strings here.
+    const units = c.secondaryUnits ?? (c.secondary ? [c.secondary] : []);
+    return findStreet(c.houseNumber, c.streetName, units);
+  }
+  switch (c.kind) {
+    case "po-box": return findPoBox(c.boxNumber);
+    case "rural-route":
+    case "highway-contract": return findRouteBox(c.kind, c.routeNumber, c.boxNumber);
+    case "military": return findMilitaryBox(c.militaryUnit, c.routeNumber, c.boxNumber);
+    case "general-delivery": return findGeneralDelivery(c.city, c.state, c.postalCode);
+  }
 }
 ```
 
-Current candidate IDs are:
+The `find*` functions above represent your data access. Include locality, directionals, suffixes, urbanization, and every other identity-relevant component in your real lookup. Parameterize queries; normalized strings are still untrusted input.
 
-| ID                         | Meaning                                                     |
-| -------------------------- | ----------------------------------------------------------- |
-| `literal`                  | No structural ambiguity was introduced by the interpreter.  |
-| `explicit-unit`            | A recognized unit designator supplied explicit evidence.    |
-| `trailing-token-as-unit`   | A bare trailing token is interpreted as the unit number.    |
-| `trailing-token-as-street` | The same trailing token remains part of the literal street. |
+## Lossless evidence
 
-`assumptions` records choices that are not explicit in the input. It is empty for literal and explicit-unit candidates.
-
-Full-address candidate IDs append their component spans to the underlying delivery
-candidate ID. Treat every candidate ID as opaque and do not parse it as application data.
-
-### `AddressComponents`
+Every token has `raw`, `normalized`, `start`, and `end`. Offsets are zero-based, end-exclusive JavaScript string offsets into the original `deliveryLine` or full-address string. Normalization never rewrites that original string. Unicode apostrophes, compatible characters, and fraction glyphs normalize without moving source spans.
 
 ```ts
-interface AddressComponents {
-  houseNumber: string;
-  preDirectional?: string;
-  streetName: string;
-  streetSuffix?: string;
-  postDirectional?: string;
-  secondary?: {
-    designator?: string;
-    number?: string;
-  };
-  city?: string;
-  state?: string;
-  postalCode?: string;
-}
+const result = interpretAddress({ deliveryLine: "123½ O’Connor Ave #4" });
+const candidate = result.candidates[0];
+// houseNumber: "123 1/2", streetName: "O'CONNOR", streetSuffix: "AVE"
+// The house-number span still slices the original text "123½".
 ```
 
-Recognized values are normalized to uppercase. Known directionals, street suffixes, and secondary-unit designators use their abbreviated forms. A known leading directional is extracted even when the street has no recognized suffix; the remaining street text stays literal. Numeric grid-style streets also separate their trailing directional.
+`sourceSpans.secondary` covers the complete secondary phrase. A chain also has individual `secondaryUnits` spans. Full addresses can have `city`, `state`, `postalCode`, `country`, and `urbanization` spans. Fields supplied separately to `interpretAddress` have no span in the delivery line.
 
-### `createAddressResolver(index)`
+Repairs can split an original token. In `Main St4B`, the repaired street span ends after `St` and the unit span starts at `4B`; the returned tokens still preserve `St4B` as written. Source spans may therefore start or end inside a token. They can include trailing delimiters retained by tokenization.
+
+`assumptions` records uncertain structural choices, such as `trailing-token-is-unit`, `street-city-boundary-inferred`, `house-number-boundary-inferred`, or `leading-directional-is-street-name`. An empty list does not imply postal validation or exhaustive coverage of every possible address grammar.
+
+Feed-specific assumptions include `joined-address-components`, `house-number-spacing`, `fractional-house-separator`, `repeated-street-suffix`, `route-name-expanded`, `trailing-tokens-are-unit`, and `secondary-identifier-spacing`.
+
+Other assumptions include `compound-unit-is-building-and-unit`, `numbered-street-spelling`, `secondary-identifier-punctuation`, `secondary-before-house-number`, and `repeated-house-number`. Evidence spans can overlap when a unit appears inside the street phrase. A duplicate identifier's span remains available even when an alternative treats it as repeated text.
+
+## Resolution
+
+```ts
+import {
+  createAddressResolver,
+  createFullAddressResolver,
+  type AddressIndex,
+} from "@marvin-amador-7/address-interpreter";
+
+interface Property { id: string }
+declare const index: AddressIndex<Property>;
+
+const resolver = createAddressResolver(index);
+const result = await resolver.resolve({ deliveryLine: "123 Main St B" });
+const fullResolver = createFullAddressResolver(index);
+```
 
 ```ts
 interface AddressIndex<T> {
-  lookupCandidates(
-    candidates: readonly AddressCandidate[],
-  ): Promise<readonly AddressMatch<T>[]>;
+  lookupCandidates(candidates: readonly AddressCandidate[]): Promise<readonly AddressMatch<T>[]>;
 }
-
-function createAddressResolver<T>(index: AddressIndex<T>): AddressResolver<T>;
-function createFullAddressResolver<T>(index: AddressIndex<T>): FullAddressResolver<T>;
+interface AddressMatch<T> {
+  candidateId: string;
+  entityId: string;
+  value: T;
+}
 ```
 
-For valid input the resolver calls `lookupCandidates` once with the complete candidate set. This lets the adapter decide whether one batch, parallel probes, or sequential fallback is appropriate for its data source.
+The resolver calls the index once with all candidates. It rejects matches that reference an unknown candidate or an empty/missing entity ID.
 
-`createFullAddressResolver` accepts a full-address string but otherwise uses the same index
-and returns the same four resolution states.
+| Result | Meaning |
+| --- | --- |
+| `invalid` | No complete candidate set; the index is not called. |
+| `not-found` | The index returned no matches. |
+| `resolved` | Every returned match identifies the same entity. |
+| `ambiguous` | Returned matches identify different entities. |
 
-## Normalization behavior
+For aliases sharing an `entityId`, the first match's value is returned. Your adapter must ensure those values are interchangeable. A display address, photo URL, or owner name is not reliable identity evidence. Tenant scope, authorization, and complete component matching belong in the adapter.
 
-The interpreter currently handles:
+## Diagnostics and limits
 
-- mixed case and repeated whitespace;
-- terminal commas, semicolons, colons, and periods;
-- periods inside alphabetic abbreviations such as `N.E.`;
-- eight cardinal and intercardinal directionals in abbreviated or full-word form;
-- common street suffix names, abbreviations, and misspellings;
-- common USPS secondary-unit designators and long forms;
-- Puerto Rico `CARR` route notation;
-- hyphenated house numbers and unit-shaped tokens;
-- pre-directionals on suffixed and suffixless streets, post-directionals, numeric grid-style directionals, and post-directionals before explicit units;
-- multi-token explicit unit numbers;
-- suffixless literal streets.
-- full-address locality suffixes with or without delimiters;
-- US state and possession names and abbreviations;
-- five-digit ZIP Codes and ZIP+4 Codes.
+`AddressDiagnostic` includes `missing-house-number`, `unrecognized-delivery-line`, `invalid-input`, `incomplete-secondary`, `input-too-long`, and `too-many-candidates`.
 
-Normalization tables are informed by USPS Publication 28:
+`ADDRESS_LIMITS` exposes fixed budgets of 4,096 characters per input field, 128 tokens, and 256 candidates. When a budget is exceeded, the result contains no candidates. The library never sends a truncated set to an index, since that could hide a competing match. Incorrect JavaScript argument types return `invalid-input` instead of throwing.
 
-- [Appendix C1 — Street Suffix Abbreviations](https://pe.usps.com/text/pub28/28apc_002.htm)
-- [Appendix C2 — Secondary Unit Designators](https://pe.usps.com/text/pub28/pub28apc_003.htm)
-- [Section 233 — Directionals](https://pe.usps.com/text/pub28/28c2_014.htm)
+## Validation and corpus evaluation
 
-This package is not affiliated with or endorsed by the United States Postal Service.
-
-## Diagnostics
-
-```ts
-type AddressDiagnostic = "missing-house-number" | "unrecognized-delivery-line";
-```
-
-Example:
-
-```ts
-interpretAddress({ deliveryLine: "Main St" });
-
-// {
-//   tokens: [...],
-//   candidates: [],
-//   diagnostics: ["missing-house-number"],
-// }
-```
-
-Diagnostics describe interpretation failure only. They do not assert whether an address is deliverable, occupied, geocodable, or present in your database.
-
-## Guarantees and non-goals
-
-### Guarantees
-
-- Original token text and source offsets are retained.
-- Recognized components normalize deterministically.
-- Invalid input does not query the address index.
-- Ambiguity is decided by distinct entity IDs, not candidate count.
-- There are no runtime dependencies or hidden network calls.
-- Both ESM and CommonJS consumers receive the same implementation.
-- TypeScript declarations are included in the published package.
-
-### Non-goals
-
-- **Deliverability validation:** this is not CASS, DPV, or an authoritative USPS lookup.
-- **Geocoding:** no coordinates, parcel IDs, or spatial matching are produced.
-- **Fuzzy matching:** misspelled street names are not searched against a corpus.
-- **Authoritative locality validation:** syntactic locality candidates are produced, but city/ZIP validity must be established by an address index or postal data source.
-- **PO boxes and intersections:** these forms are not currently interpreted.
-- **International addresses:** the grammar and normalization tables target US-style delivery lines.
-- **Certainty without evidence:** ambiguous syntax remains ambiguous until an index resolves it.
-
-Street and unit vocabularies are finite. If a token is not recognized structurally, the interpreter prefers preserving it as literal street text over inventing a component.
-
-## Security and query construction
-
-Candidates contain normalized strings, not trusted SQL fragments. Adapters must still use parameterized queries or the equivalent escaping mechanism for their data source.
-
-The resolver assumes its adapter enforces authorization, tenant scope, and data-access policy. This module performs address interpretation and identity comparison only.
-
-## Testing
-
-The package currently carries 118 tests across the interpreter and resolver. The suite covers:
-
-- ambiguous bare units and route-shaped addresses;
-- explicit, numberless, attached-`#`, and multi-token secondary units;
-- punctuation, apostrophes, directionals, suffixes, and source spans;
-- suffixless streets and invalid delivery lines;
-- delimited and unseparated full addresses, full state names, and locality collisions;
-- resolved, ambiguous, not-found, and invalid resolver outcomes;
-- multiple candidate aliases that identify one entity.
-
-Run the full quality gate:
+Use Node.js 22 or 24 for development tooling. The built library supports Node.js 18 and later.
 
 ```sh
+npm ci
 npm run check
-```
-
-That command performs strict TypeScript checking, runs the test suite, and builds ESM, CommonJS, source maps, and declarations.
-
-Inspect the exact npm publish allowlist:
-
-```sh
 npm run package:files
 ```
 
-## Verified against production data
+The quality gate runs strict TypeScript checking, regression and seeded invariant tests, the ESM/CommonJS build, and tests against the actual npm tarball. Tarball checks exercise both runtime entry points and TypeScript `.mts`/`.cts` consumers. CI repeats the package checks on Node.js 18.
 
-Unit tests prove the interpreter behaves as specified. This section records what happened
-when the package was wired into a live property service and run against a production MLS
-dataset — real addresses, real listings, no fixtures.
+The [initial review report](docs/review-2026-09-26.md) documents the source review and first comparisons. The [400,000-address research report](docs/research-400k-2026-09-26.md) records the expanded HomeAnalytics MotherDuck sample and subsequent parser iterations. The [September 28 development follow-up](docs/research-2026-09-28.md) records later grammar improvements and the state-level input audit on that same corpus. The [curated-corpus report](docs/research-valid-corpus-2026-09-28.md) documents admission rules, the new baseline, spelling improvements and the 93.573% held-out result. The [parser design follow-up](docs/parser-design-2026-09-28.md) explains optional spelling expansion, compatibility checks, candidate-quality measurements, and the admission audit. The [95% investigation](docs/research-95-2026-09-28.md) records the next gains and corrects the comparison-source description after a live schema check. Address extracts and address-level reports remain under the ignored `.local/` directory.
 
-Resolution ran against a production MLS index. The ambiguous cases were not constructed —
-they were found by searching that index for addresses whose two readings both exist.
+The [correctness review](docs/correctness-review-2026-09-29.md) supersedes cross-source agreement as the research objective. The [source and dataset investigation](docs/research-parser-correctness-sources-2026-09-29.md) compares USPS, RESO, usaddress, libpostal, OpenAddresses, and the National Address Database. Correctness remains unmeasured until exact-input annotations are independently reviewed. Public datasets and generated inputs do not supply those labels automatically.
 
-### Parsing cases that defeat string-only approaches
+The [ordinal boundary experiment](docs/research-ordinal-boundaries-2026-09-29.md) removes invented house-number and street-name readings while retaining all previous development agreements. It records the predeclared hypothesis, exact-set regression tests, candidate differences, timing uncertainty, and keep decision. Fewer candidates alone do not establish corpus-wide correctness.
 
-Each of these had previously broken a hand-rolled parser fix in the consuming service —
-either by silently dropping the unit, or by inventing one that did not exist.
+The [street-keyword experiment](docs/research-keyword-boundaries-2026-10-05.md) recovers suffixed street names containing secondary keywords before bare units. It gains 32 development agreements and one provisional labeled reading, with no removed readings in the development audit. Exact-set agreement remains unchanged.
 
-| Delivery line              | Candidates | What it proves                                                          |
-| -------------------------- | ---------- | ----------------------------------------------------------------------- |
-| `3637 Snell Ave 231`       | 2          | Bare trailing unit is surfaced, not swallowed into the street name       |
-| `100 O'Connor Ave 4`       | 2          | Apostrophes survive; normalization does not desynchronize the source text |
-| `123 N. Main St. 4`        | 2          | Multiple periods parse; pre-directional `N` is extracted                 |
-| `731 W Calle Lupa`         | 1          | Suffixless street text stays literal after pre-directional `W`           |
-| `1196 W 2325 S`            | 1          | Numeric grid street separates pre-directional `W` and post-directional `S` |
-| `123 Abbey Road 4`         | 2          | An ordinary `ROAD` suffix does not suppress the unit reading             |
-| `123 Desert Willow Loop 4` | 2          | Same for `LOOP`                                                          |
-| `123 State Spur 5`         | 2          | A route-shaped string keeps its literal reading instead of inventing a unit |
-| `100 State Turnpike 12`    | 2          | Same for `TURNPIKE`                                                      |
-| `1200 Highway 6`           | 1          | No suffix precedes the number, so no ambiguity is manufactured           |
-| `231-B` `B231` `231-233` `12A` | 2 each | Hyphenated, letter-prefixed, range, and alphanumeric units are recognized |
+The [bare-unit floor experiment](docs/research-bare-unit-floor-2026-10-05.md) fixes inputs such as `12 Oak St 204 Floor 2`. Its first attempt was rejected despite a higher field-agreement score because it misread ordinal floor phrases. The final repair passes the expanded regression suite and preserves every audited development interpretation; measured corpus scores remain unchanged.
 
-Normalization is stable across spellings: `EAST` and `E` produce the same candidate, as do
-`Court` and `Ct`, and `NORTHWEST` and `NW`. Quadrants stay distinct — `NW` never matches
-`NE`. Unparseable input yields zero candidates plus a diagnostic rather than a bad guess.
+Prepare a blind development review queue within the same corpus:
 
-### All four resolver outcomes, on real listings
+```sh
+npm run research:review -- --count 2000
+```
 
-`9750 Monterey Dr` is a real building whose records exist in the feed under two different
-encodings — one as `MONTEREY` with unit `64`, another as a literal street named
-`MONTEREY DR 64` — under two different MLS listing IDs.
+This creates private, immutable sampling evidence under `.local/correctness-review/development-v1/`, with 2,000 unreviewed inputs stratified by state and cohort. Reviewers see only the exact delivery line, opaque identity, and empty annotation slots. ATTOM fields, parser predictions, and holdout examples are omitted. Selection probabilities and source-row mapping are saved separately. The command refuses to overwrite a review directory. This is annotation preparation, not a scored benchmark or a new corpus.
 
-| Delivery line           | Status      | Result                                                        |
-| ----------------------- | ----------- | ------------------------------------------------------------- |
-| `9750 Monterey Dr 64`   | `ambiguous` | Both readings matched **different** listings → refused to guess |
-| `9750 N Monterey Dr 64` | `resolved`  | The directional excludes the literal reading → one match        |
-| `9750 Monterey Dr 32`   | `resolved`  | Both readings matched the **same** listing → aliases collapsed  |
-| `48 E Bates St`         | `resolved`  | Unambiguous address, single candidate                           |
-| `3637 Snell Ave 231`    | `not-found` | Both readings parsed cleanly; neither exists in the index        |
-| `66 NEW YORK AVE NE 107`| `not-found` | The correct quadrant resolves; the wrong one matches nothing      |
-| `Lot 7`                 | `invalid`   | `missing-house-number` diagnostic                               |
+The [Luna labeling pilot](docs/labeling-pilot-2026-09-29.md) runs two blind passes over 200 inputs from that queue. The [annotation guide](docs/labeling-guide-v1.md) requires source-token evidence for every field and every building, floor, and unit element. Structural checks reject invented evidence, missing tokens, duplicate cases, and changed inputs. Disagreements, unsupported decisions, and a preselected audit sample go to a separate reviewer. All resulting labels remain provisional, including model consensus.
 
-The third row is the subtle one. Two candidates matching is *not* ambiguity — the resolver
-compares `entityId`, so two readings of one property resolve cleanly while two readings of
-two properties fail closed. That distinction is the whole point of the `entityId` invariant.
+For human review, run `npm run research:calibration` once, then `npm run research:review-ui`. The local interface at `http://127.0.0.1:4319` saves an initial source-only reading before revealing agent proposals. It supports token selection, complete secondary chains, ambiguous readings, uncertainty, resumable drafts and recorded final revisions. After reviews are finalized, `npm run research:score-reviewed` creates a versioned experimental evaluation. The [human calibration workflow](docs/research-lab-workflow.md#human-calibration-workspace) explains selection, privacy, review provenance and scoring limits.
 
-Both `9750 Monterey Dr 32` candidates really do match in the index, and both return the
-same listing, which is why the resolver collapses them. Note that this depends on the index
-returning a stable `entityId` per candidate: that address carries several listings, and the
-adapter selects the most recent. Deciding *which* row represents a candidate is the index's
-responsibility — the resolver only compares the identities it is handed.
+**Manual labeling is optional for continuing development.** The [automated evaluation protocol](docs/automated-evaluation-v1.md) freezes a component projection of the existing Luna labels without consulting parser output. Run `npm run research:prepare-agent-benchmark` once, then `npm run research:score-agent -- --baseline <frozen-build.mjs>`. Both spelling modes report exact-set agreement, labeled-reading recall, extra readings and complete secondary chains. Unresolved cases remain visible. These provisional comparisons do not establish population accuracy; completed human reviews remain separate evidence.
 
-### Behavior preserved end to end
+Pass `--agent-benchmark .local/correctness-review/agent-components-v1/bundle.json` to a research cycle, or set `agentBenchmark` to that path in its private report configuration. Each cycle pins the bundle, runs the automated comparison and adds aggregate results to Benchmarks. The correctness release gate is unchanged; its pending status does not prevent development experiments.
 
-Queried through the consuming service against the live index:
+The scripts prepare work, validate outputs, compare passes, and finalize review evidence. A coordinator dispatches the actual model jobs; these commands do not call a model API or start a persistent labeling service. After workers finish, refresh the aggregate labeling panel with:
 
-| Delivery line                   | Resolves to        |
-| ------------------------------- | ------------------ |
-| `66 NEW YORK AVE NW APT 107`    | the same record    |
-| `66 NEW YORK AVE NW 107`        | the same record    |
-| `66 NEW YORK AVE NORTHWEST 107` | the same record    |
-| `66 NEW YORK AVE NE 107`        | no record          |
-| `6088 Knoll Park Ct`            | the same record    |
-| `6088 Knoll Park Court`         | the same record    |
+```sh
+npm run research:label-progress
+npm run research:report
+```
 
-The bare form (`NW 107`) previously matched nothing while the keyword form resolved. Every
-accepted spelling now reaches one identical record, and the wrong quadrant still reaches
-none — the keyword, the abbreviation, and the spelled-out directional are interchangeable,
-while a genuine difference in the address is not.
+Set `labelingProgress` in `.local/research/report-config.json` to the private pilot's `progress.json`. The dashboard shows both passes and their disagreements by state, plus whole-pilot adjudication counts. It exports only allowed aggregate fields. Agent acceptance and model agreement never populate the parser-correctness score.
 
-### What this does and does not establish
+The [annotation expansion protocol](docs/labeling-expansion-v1.md) extends that sample to 1,000 inputs within the same corpus. It reuses the 200 completed labels and assigns 800 new inputs to two blind Luna passes. Run `node scripts/labeling-expansion.mjs prepare` once, then `status` to inspect validated batch counts and `compare` after both passes finish. Use one active worker and batches of 20 to limit request pressure. After the separate reviewer's blind labels are saved, `node scripts/finish-labeling-expansion.mjs freeze-review` records their receipt before proposal inspection; `finalize` requires complete adjudication and decision evidence. Historical labels and manual reviews remain separate, and all new model labels remain provisional.
 
-It establishes that the interpreter surfaces the ambiguity real data actually contains, and
-that a resolver backed by a real index can settle it correctly in every direction — including
-the case where it must decline.
+Set `labelingExpansion` in the private report configuration to `.local/correctness-review/luna-expansion-v1`. Each `npm run research:report` verifies the completed batches and refreshes a separate expansion panel with reused-label counts, both new passes, review status, and state coverage. The original pilot panel remains available. Public exports contain aggregate counts only.
 
-It does not establish that any particular index is complete. `ambiguous` and `not-found` are
-properties of the data, not defects in the caller's address string, and applications should
-present them differently from an error.
+Workers can import `writeLabelBatch(inputFile, annotations)` from `scripts/write-label-batch.mjs` to validate their chosen token assignments before saving. Invalid batches create no output, and completed batch files cannot be overwritten. The helper serializes decisions; it does not infer address labels.
 
-## Compatibility
+Research uses one frozen, curated corpus at `.local/corpus/mls-valid.jsonl`: 336,057 records admitted from the 400,000-address download. It contains 268,923 development records and 67,134 holdout records, across all 50 states plus DC. The geographic and difficult-format cohorts remain within that single corpus. The original download and earlier stress sample are audit sources, not active benchmarks. Historical evaluations can still use explicit inputs:
 
-| Surface              | Support                                   |
-| -------------------- | ----------------------------------------- |
-| Node.js              | `>=18`                                    |
-| ESM                  | `dist/index.js`                           |
-| CommonJS             | `dist/index.cjs`                          |
-| TypeScript           | Bundled `.d.ts` and `.d.cts` declarations |
-| Runtime dependencies | None                                      |
+```sh
+python scripts/download-mls-corpus.py
+npm run build
+node scripts/evaluate-corpus.mjs --input .local/corpus/mls.jsonl --split development
+node scripts/evaluate-corpus.mjs --input .local/corpus/mls.jsonl --split holdout
+```
 
-The package is pre-1.0. Pin an exact version in high-risk systems and review release notes before upgrading normalization or candidate semantics.
+Use `--baseline /path/to/baseline.mjs` to compare another build. The downloader reads only address fields and performs no remote writes. It samples source blocks, stratifies by address shape, and assigns every property to either development or holdout. The saved manifest records the source, sampling parameters, timestamp, counts, and corpus hash. The optional `--suffix-reference` points to an independent normalization reference for evaluating source labels.
 
-## Release process
+To prepare the active county-balanced sample, use DuckDB and the HomeAnalytics token profile. Freeze a baseline build before editing the parser, then run:
 
-Releases are automated with [Release Please](https://github.com/googleapis/release-please) and npm Trusted Publishing:
+```sh
+mkdir -p .local/baseline
+cp dist/index.js .local/baseline/index.mjs
+python scripts/download-geographic-corpus.py --rows 400000
+node scripts/prepare-holdout.mjs
+npm run research:prepare
+npm run research -- --baseline .local/baseline/index.mjs --target 95
+```
 
-1. Conventional commits on `main` update an automatically maintained release pull request.
-2. Merging that pull request updates `package.json` and `CHANGELOG.md`, creates the version tag, and creates the GitHub Release.
-3. The tagged source is installed from `package-lock.json` and must pass `npm run check`.
-4. GitHub Actions publishes to npm through a short-lived OIDC identity.
-5. npm attaches provenance linking the package tarball to its public source and workflow.
+The larger downloader accepts 300,000 to 500,000 rows. Three quarters form the county-balanced geographic cohort; one quarter samples difficult formats. It excludes property groups from the earlier corpus. The saved sample covers all 50 states plus DC. It is not population weighted, and source county groups are not an independently validated county inventory.
 
-Commit messages follow Conventional Commits:
+Admission rules in `scripts/corpus-policy.mjs` inspect listing text and source fields, independently of parser output. Placeholder and land-description records, missing fields, observed conflicts, and unverified street-name evidence are quarantined with reasons. Spacing, common abbreviations, fractions, route order and compound identifiers remain admissible. This is input/reference consistency, not proof of a registered or deliverable address. Unverified records are not automatically declared invalid real-world addresses. The preparation command refuses to overwrite its frozen corpus, manifest or exclusion journal.
 
-- `fix:` produces a patch release;
-- `feat:` produces a minor release;
-- `feat!:` or a `BREAKING CHANGE:` footer produces a major release.
+Each research cycle verifies the corpus and admission-policy hashes, runs the package checks, evaluates development diagnostics, groups disagreements, and saves corpus, source, evaluator, and baseline hashes with a run journal. The objective is now **parser correctness**, with a 95% target. An exact interpretation-set scorer is implemented, but calibrated component labels and a population correctness evaluation are still pending, so successful diagnostic cycles return `2`, `awaiting-correctness-labels`. Even 100% ATTOM agreement cannot pass this target. Cross-source losses return `2`, `diagnostic-review-required`, because they need adjudication rather than automatic rejection. Package/check failures return `1`. Historical exit statuses retain their original meaning. An agent or developer implements the next hypothesis; this command does not modify code or run a persistent background agent.
 
-## Contributing
+The harness always uses the active corpus; an explicit `--input` must name that same file. The standalone evaluator defaults to it but still accepts other inputs for historical audits and the derived holdout.
 
-A useful address fixture includes more than an expected component object. Please capture:
+Every cycle regenerates `.local/research/index.html` at startup and completion. The public-oriented lab has **Overview, Benchmarks, Research, Data & methods, and Try the parser**. Benchmarks contains the diagnostic trend/scatter plot, field disagreements, and state comparisons. Research records hypotheses, observed results, and decisions. Data & methods explains admission, labeling, selection bias, and evidence maturity. The explorer runs the actual bundled parser locally on synthetic examples or visitor input, showing full chains, assumptions, and source spans.
 
-1. the raw delivery line and separate locality fields;
-2. every structurally plausible interpretation;
-3. the source spans that justify each interpretation;
-4. whether real index evidence can disambiguate it;
-5. the failure consequence if the wrong entity is returned.
+State results show MLS → ATTOM agreement for the selected evaluation, with matched/evaluated counts and changes from its own baseline. They combine both cohorts. The annotation pilot has a separate state selector under Data & methods; review outcomes cover the whole pilot. Unknown measurements remain unscored, and model consistency is never displayed as parser accuracy.
 
-Changes should preserve the central invariant: syntax may generate candidates, but only data may establish identity.
+Use `--experiment .local/experiment.json` to freeze a question, hypothesis, expected effect, change, and acceptance rule before evaluation. Record a keep/reject/inconclusive decision afterward with `npm run research:decide`. Decisions bind to exact run evidence and cannot overwrite earlier decisions. Unplanned and historical runs remain diagnostic checkpoints with missing research metadata disclosed. See [the research workflow](docs/research-lab-workflow.md) and [scoring contract](docs/benchmark-contract-v1.md).
 
-## License
+```sh
+npm run build
+npm run research:report
+```
 
-[MIT](./LICENSE) © Marvin Amador
+The standalone report command refreshes the HTML without rerunning evaluation. `--input` selects a research directory and `--output` selects its HTML destination; both must remain under `.local`. It embeds aggregate metrics, public-safe research descriptions, synthetic examples, and the parser build. Private corpus rows and annotation text are excluded. Visitor inputs stay in memory and are excluded from exports. No external assets or services are loaded. The page supports keyboard navigation, saved view/filter URLs, aggregate JSON export, and optional 30-second refresh, paused while the parser explorer is open.
+
+Optional `.local/research/report-config.json` sets the correctness `target` shown in the evidence status bar and used by future cycles unless `--target` overrides it. Diagnostic agreement charts have no correctness target line. Historical run targets remain intact. It also names corpora, annotates older runs, and registers separately captured evaluation summaries, including holdouts. `corpora` maps a corpus SHA-256 to `{ "id": "expanded", "label": "Expanded corpus", "rows": 400000, "description": "..." }`. Related development and holdout hashes can share that display ID; chart lines require identical recorded corpus, policy, evaluator, measurement-version, split, and parser-option identities. Missing historical identities remain unconnected. `annotations` maps a run directory name to `{ "label": "...", "note": "..." }`. Each `checkpoints` entry supplies `id`, `label`, `file`, `corpusHash`, and an ISO `started` timestamp; use `version: "baseline"` and `kind: "baseline"` to display a summary's comparison build. Only aggregate `.json` files under `.local` are accepted. Records are read from run directories; no historical result is rewritten by the visualization.
+
+The local report configuration sets `activeDataset: "valid"` to show only the curated corpus. `curationManifest` names its aggregate admission manifest, displayed in Data & methods with retained and excluded counts. Earlier run files and checkpoint registrations remain intact but are excluded from the active HTML. Both the starting parser and improved builds are evaluated on the same admitted records; the change in denominator is not counted as a parser improvement.
+
+Holdout selection excludes exact structured-address and listing/locality keys seen in the earlier corpus or new development data, and removes duplicates within the holdout. Freeze the parser before evaluating it. To score the selected holdout without exporting ordinary failure examples:
+
+```sh
+node scripts/evaluate-corpus.mjs --split holdout --baseline .local/baseline/index.mjs --failure-limit 0 --output .local/corpus/valid-holdout
+```
+
+The diagnostic corpus metric compares `MLSLISTINGADDRESS` with ATTOM `PROPERTYADDRESSHOUSENUMBER`, `PROPERTYADDRESSSTREET*`, and `PROPERTYADDRESSUNIT*` fields. These are property-address comparison labels, not native MLS component annotations. The live source schema was checked during the 95% investigation. The dashboard now calls this **MLS → ATTOM field agreement**. Listing strings can omit components or contradict those property fields, so a mismatch is not automatically a parser error. Generated variants test formatting of the property components. Neither metric is a national accuracy estimate, a false-positive measurement, or a deliverability test.
+
+New evaluations also record first-candidate agreement, successes found only in later candidates, the number of readings that disagree with ATTOM property fields, and parser rejections. No-candidate results remain in the admitted denominator. The legacy `invalid` aggregate is an alias for parser rejection, not a corpus exclusion. Candidate order is unranked, and cross-source disagreement is not proof of a false interpretation. Earlier reports leave these new measurements empty rather than assuming zero.
+
+Every research cycle now saves `performance.json` with eight alternating local timing trials after two warmups on every sixteenth development input. It compares the baseline, current default, and current parser with spelling alternatives disabled. Input preparation is outside the timed region. Timings inform review and do not gate acceptance because local timing varies. The dashboard shows reading-quality counts by state or cohort and a separately labeled national timing sample.
+
+To measure the optional mode or repeat the timing comparison on the same corpus:
+
+```sh
+node scripts/evaluate-corpus.mjs --without-spelling --failure-limit 0 --output .local/corpus/without-spelling
+node scripts/benchmark-parser.mjs --baseline .local/baseline/index.mjs
+```
+
+## Sources
+
+Normalization and delivery grammars were checked against USPS Publication 28:
+
+- [Appendix C1, street suffixes](https://pe.usps.com/text/pub28/28apc_002.htm)
+- [Appendix C2, secondary designators](https://pe.usps.com/text/pub28/pub28apc_003.htm)
+- [Section 233, directionals](https://pe.usps.com/text/pub28/28c2_014.htm)
+- [Section 234, consecutive suffix words](https://pe.usps.com/text/pub28/28c2_015.htm)
+- [Section 235, numeric street names](https://pe.usps.com/text/pub28/28c2_016.htm)
+- [Appendix F, highway names](https://pe.usps.com/text/pub28/28apf.htm)
+- [Appendix D2, grid addresses](https://pe.usps.com/text/pub28/28apd_003.htm)
+- [Appendix D4, fractional addresses](https://pe.usps.com/text/pub28/28apd_005.htm)
+- [Section 241, rural routes](https://pe.usps.com/text/pub28/28c2_021.htm)
+- [Section 225, military addresses](https://pe.usps.com/text/pub28/28c2_010.htm)
+
+This package is not affiliated with USPS. It is not a CASS, DPV, geocoding, or authoritative address-validation service.

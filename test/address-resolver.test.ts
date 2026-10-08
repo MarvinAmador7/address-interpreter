@@ -11,6 +11,11 @@ interface PropertyRecord {
 }
 
 describe("createAddressResolver", () => {
+  test("propagates adapter failures without reporting a miss", async () => {
+    const failure = new Error("index unavailable");
+    const resolver = createAddressResolver({ async lookupCandidates() { throw failure; } });
+    await expect(resolver.resolve({ deliveryLine: "123 Main St" })).rejects.toBe(failure);
+  });
   test("resolves when the index finds one entity", async () => {
     const match: AddressMatch<PropertyRecord> = {
       candidateId: "explicit-unit",

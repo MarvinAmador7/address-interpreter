@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Address lab · Human review</title><link rel="stylesheet" href="/style.css"><script type="module" src="/client.js"></script></head>
+<body>
+<a class="skip" href="#workspace">Skip to address</a>
+<header><a class="brand" href="/">Address lab <span>/ Human review</span></a><div class="header-actions"><span id="reviewer-name">Local calibration</span><a href="/api/export" download>Export reviews</a></div></header>
+<div id="message" role="alert" hidden></div>
+<main>
+  <section id="onboarding" hidden>
+    <div class="intro"><p class="muted">Calibration · first session</p><h1>Teach us what the address says.</h1><p>Your reading helps us find mistakes shared by the parser and the labeling agents. Start with 20 addresses. You can stop at any time.</p>
+    <ol class="instructions"><li><strong>Read the source first.</strong> Assign its words to address fields. Do not look up the address or infer missing details.</li><li><strong>Compare after saving.</strong> Agent proposals appear only after your initial reading is recorded.</li><li><strong>Keep uncertainty.</strong> Choose “Unsure” when the text does not support a clear answer.</li></ol></div>
+    <form id="profile-form"><h2>Who is reviewing?</h2><label>Your name<input id="reviewer" name="name" autocomplete="name" maxlength="100" required></label><label>Experience with addresses<select id="experience" required><option value="">Choose your experience</option><option value="data-product">Data / product reviewer</option><option value="address-specialist">Address specialist</option><option value="other">Other</option></select></label><p class="muted">We record this context with your reviews. A review is not automatically expert-validated evidence.</p><button class="primary" type="submit">Start first batch</button></form>
+  </section>
+  <section id="review-app" hidden>
+    <div class="page-heading"><div><h1>Review address labels</h1><p id="progress" class="muted"></p></div><label class="batch-label">Review batch<select id="batch"></select></label></div>
+    <nav id="queue" aria-label="Cases in this batch"></nav>
+    <div class="workspace" id="workspace" tabindex="-1">
+      <section class="editing">
+        <div class="case-heading"><span id="case-number"></span><span id="phase" class="phase"></span><span id="save-state" role="status" aria-live="polite">Loading…</span></div>
+        <h2 id="address" class="address"></h2>
+        <p id="phase-help" class="muted"></p>
+        <label class="decision-label">What can you conclude?<select id="status"></select></label>
+        <div id="supported-editor">
+          <div class="reading-toolbar"><div id="reading-tabs" role="group" aria-label="Accepted readings"></div><div><button id="add-reading" type="button">Add reading</button><button id="remove-reading" type="button" class="text-button">Remove reading</button></div></div>
+          <div class="token-area"><div class="token-help"><strong>Select the source pieces</strong><span id="selection-count" aria-live="polite"></span></div><div id="tokens" role="group" aria-label="Source tokens"></div><div class="token-tools"><button id="clear-selection" type="button" class="text-button">Clear selection</button><span id="coverage"></span></div></div>
+          <div class="field-head"><span>Assign selected pieces to a field</span><span>Canonical value · check before saving</span></div>
+          <div id="fields"></div>
+          <div class="add-field"><label>Additional field<select id="extra-field"></select></label><button id="add-field" type="button">Add field</button></div>
+          <section class="secondary-section"><div class="section-heading"><h3>Building, floor &amp; unit</h3><button id="add-secondary" type="button">Add secondary</button></div><p class="muted">Keep each element in source order. A bare unit has no designator.</p><div id="secondaries"></div></section>
+          <div class="separator-row"><button id="assign-separator" type="button">Mark as formatting punctuation</button><span id="separators"></span></div>
+        </div>
+        <label class="notes-label">Reason or uncertainty<textarea id="notes" rows="3" maxlength="4000" placeholder="Explain an uncertain reading, a correction, or a changed decision."></textarea></label>
+        <label class="check-label" id="exposure-label"><input type="checkbox" id="exposed">I have already seen labels or parser output for this exact address.</label>
+        <div class="review-actions"><label class="check-label"><input id="confirmed" type="checkbox">I checked the source and the values above. My decision includes any uncertainty.</label><div class="action-buttons"><button id="save-review" type="button" class="primary">Save initial reading &amp; compare</button><button id="save-draft" type="button">Save draft</button><button id="next" type="button" class="text-button">Next case →</button></div></div>
+      </section>
+      <aside>
+        <section id="blind-help"><h2>Your reading comes first</h2><p>Agent proposals are hidden until you save. This lets us check the labels without steering your first judgment.</p><p>Select one or more pieces above, then click the field they belong to. Adjacent pieces such as <code>12</code> <code>-</code> <code>14</code> stay together in the house number.</p></section>
+        <section id="comparison" hidden><h2>Compare the readings</h2><p class="muted">These are proposals, not answers. Your initial reading is preserved. Load a proposal only if you want to edit it into your final decision.</p><div id="proposals"></div></section>
+        <details class="guide"><summary>Review guide</summary><ul><li>Use only the supplied text. No address lookup is needed.</li><li>Preserve every number, word, hyphen, fraction and letter suffix.</li><li>Keep building, floor and apartment as separate secondary elements.</li><li>Add another reading only when the text supports it.</li><li>Unknown or unsupported does not mean invalid.</li><li>Clearly non-address requires a reason. Missing locality alone is not a reason.</li></ul><p>Assignments come from you. Canonical abbreviations are editable suggestions. Nothing here proves the address exists.</p></details>
+        <div class="review-footnote"><p>Saved on this computer.<br>Drafts resume when you return.</p><p>Calibration reviews remain provisional. They do not enter a public accuracy claim automatically.</p></div>
+      </aside>
+    </div>
+  </section>
+  <p id="loading" class="muted">Loading the local review workspace…</p>
+</main>
+</body></html>

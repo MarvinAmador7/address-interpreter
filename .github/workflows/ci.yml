@@ -56,3 +56,21 @@ jobs:
 
       - name: Run package quality gate
         run: npm run check
+
+      - name: Install browser for research explorer checks
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Verify the generated research explorer
+        run: npm run test:research-ui
+
+      - name: Verify the human labeling workflow
+        run: npm run test:review-ui
+
+      - name: Use minimum supported runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: "18"
+          package-manager-cache: false
+
+      - name: Verify packed consumers on Node.js 18
+        run: npm run test:package

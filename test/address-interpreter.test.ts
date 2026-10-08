@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { interpretAddress, interpretFullAddress } from "../src/index";
 
 describe("interpretAddress", () => {
-  test("returns one interpretation when a secondary unit is explicit", () => {
+  test("preserves an explicit unit alongside compound identifier alternatives", () => {
     const interpretation = interpretAddress({
       deliveryLine: "123 Main St Apt 231-B",
       city: "Austin",
@@ -10,7 +10,7 @@ describe("interpretAddress", () => {
       postalCode: "78701",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(3);
     expect(interpretation.candidates[0]?.components).toEqual({
       houseNumber: "123",
       streetName: "MAIN",
@@ -60,14 +60,16 @@ describe("interpretAddress", () => {
       state: "CA",
     });
 
-    expect(interpretation.tokens.map(({ raw, normalized }) => ({ raw, normalized }))).toEqual([
+    expect(
+      interpretation.tokens.map(({ raw, normalized }) => ({ raw, normalized })),
+    ).toEqual([
       { raw: "100", normalized: "100" },
       { raw: "O'Connor", normalized: "O'CONNOR" },
       { raw: "Ave.", normalized: "AVE" },
       { raw: "Apt.", normalized: "APT" },
       { raw: "4", normalized: "4" },
     ]);
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(3);
     expect(interpretation.candidates[0]?.components).toMatchObject({
       houseNumber: "100",
       streetName: "O'CONNOR",
@@ -165,7 +167,16 @@ describe("interpretAddress", () => {
     expect(interpretation.candidates.map((candidate) => candidate.id)).toEqual([
       "trailing-token-as-unit",
       "trailing-token-as-street",
+      ...(deliveryLine.includes("Desert Willow")
+        ? ["trailing-token-as-unit:compound-street-name-spacing"]
+        : []),
     ]);
+    if (deliveryLine.includes("Desert Willow"))
+      expect(interpretation.candidates[2]?.components).toMatchObject({
+        streetName: "DESERTWILLOW",
+        streetSuffix: "LOOP",
+        secondary: { number: "4" },
+      });
     expect(interpretation.candidates[1]?.components.streetName).toBe(
       deliveryLine.split(" ").slice(1).join(" ").toUpperCase(),
     );
@@ -180,7 +191,9 @@ describe("interpretAddress", () => {
         state: "TX",
       });
 
-      expect(interpretation.candidates).toHaveLength(2);
+      expect(interpretation.candidates).toHaveLength(
+        unitNumber === "231-B" ? 4 : 3,
+      );
       expect(interpretation.candidates[0]?.components.secondary).toEqual({
         number: unitNumber,
       });
@@ -262,7 +275,6 @@ describe("interpretAddress", () => {
     ["123 N Main", "N", "MAIN"],
     ["26027 S Outrider Banks", "S", "OUTRIDER BANKS"],
     ["731 W Calle Lupa", "W", "CALLE LUPA"],
-    ["202 N 17th Street D", "N", "17TH STREET D"],
   ])(
     "separates the pre-directional from suffixless street %s",
     (deliveryLine, preDirectional, streetName) => {
@@ -430,18 +442,21 @@ describe("interpretAddress", () => {
     ["Grove", "GRV"],
     ["Hill", "HL"],
     ["Row", "ROW"],
-  ])("recognizes the dataset-reported USPS %s suffix", (rawSuffix, streetSuffix) => {
-    const interpretation = interpretAddress({
-      deliveryLine: `123 Main ${rawSuffix}`,
-      city: "Austin",
-      state: "TX",
-    });
+  ])(
+    "recognizes the dataset-reported USPS %s suffix",
+    (rawSuffix, streetSuffix) => {
+      const interpretation = interpretAddress({
+        deliveryLine: `123 Main ${rawSuffix}`,
+        city: "Austin",
+        state: "TX",
+      });
 
-    expect(interpretation.candidates[0]?.components).toMatchObject({
-      streetName: "MAIN",
-      streetSuffix,
-    });
-  });
+      expect(interpretation.candidates[0]?.components).toMatchObject({
+        streetName: "MAIN",
+        streetSuffix,
+      });
+    },
+  );
 
   test("does not absorb a directional when the street uses Cove", () => {
     const interpretation = interpretAddress({
@@ -482,7 +497,12 @@ describe("interpretAddress", () => {
       state: "TX",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(3);
+    expect(
+      interpretation.candidates.some(
+        (candidate) => candidate.components.secondary?.number === "SW",
+      ),
+    ).toBe(true);
     expect(interpretation.candidates[0]?.components).toEqual({
       houseNumber: "123",
       preDirectional: "N",
@@ -502,7 +522,16 @@ describe("interpretAddress", () => {
       state: "TX",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(3);
+    expect(interpretation.candidates[2]?.components).toMatchObject({
+      streetName: "NORTHMAIN",
+      postDirectional: "SW",
+    });
+    expect(
+      interpretation.candidates.some(
+        (candidate) => candidate.components.streetName === "NORTH MAIN",
+      ),
+    ).toBe(true);
     expect(interpretation.candidates[0]?.components).toMatchObject({
       preDirectional: "N",
       streetName: "MAIN",
@@ -519,7 +548,12 @@ describe("interpretAddress", () => {
       postalCode: "30126",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(2);
+    expect(interpretation.candidates[1]?.components).toMatchObject({
+      streetName: "OAK DALE",
+      postDirectional: "SE",
+      secondary: { designator: "#", number: "120" },
+    });
     expect(interpretation.candidates[0]?.components).toEqual({
       houseNumber: "5800",
       streetName: "OAKDALE",
@@ -539,7 +573,14 @@ describe("interpretAddress", () => {
       state: "TX",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(2);
+    expect(interpretation.candidates[1]?.components.secondary).toEqual({
+      designator: "APT",
+      number: "231B",
+    });
+    expect(interpretation.candidates[1]?.assumptions).toContain(
+      "secondary-identifier-spacing",
+    );
     expect(interpretation.candidates[0]?.components.secondary).toEqual({
       designator: "APT",
       number: "231 B",
@@ -567,7 +608,9 @@ describe("interpretAddress", () => {
     expect(interpretation.candidates[1]?.components).toMatchObject({
       streetName: "MAIN ST NW 4",
     });
-    expect(interpretation.candidates[1]?.components.postDirectional).toBeUndefined();
+    expect(
+      interpretation.candidates[1]?.components.postDirectional,
+    ).toBeUndefined();
   });
 
   test("rejects a delivery line without a house number", () => {
@@ -597,20 +640,29 @@ describe("interpretAddress", () => {
     ["Slip", "SLIP"],
     ["Stop", "STOP"],
     ["Trailer", "TRLR"],
-  ])("recognizes the explicit %s unit designator", (rawDesignator, designator) => {
-    const interpretation = interpretAddress({
-      deliveryLine: `123 Main Rd ${rawDesignator} B231`,
-      city: "Austin",
-      state: "TX",
-    });
+  ])(
+    "recognizes the explicit %s unit designator",
+    (rawDesignator, designator) => {
+      const interpretation = interpretAddress({
+        deliveryLine: `123 Main Rd ${rawDesignator} B231`,
+        city: "Austin",
+        state: "TX",
+      });
 
-    expect(interpretation.candidates).toHaveLength(1);
-    expect(interpretation.candidates[0]?.components).toMatchObject({
-      streetName: "MAIN",
-      streetSuffix: "RD",
-      secondary: { designator, number: "B231" },
-    });
-  });
+      expect(interpretation.candidates).toHaveLength(2);
+      expect(interpretation.candidates[0]?.components).toMatchObject({
+        streetName: "MAIN",
+        streetSuffix: "RD",
+        secondary: { designator, number: "B231" },
+      });
+      expect(interpretation.candidates[1]?.components.secondary?.number).toBe(
+        "B-231",
+      );
+      expect(interpretation.candidates[1]?.assumptions).toContain(
+        "secondary-identifier-punctuation",
+      );
+    },
+  );
 
   test("accepts an approved unit designator that does not require a number", () => {
     const interpretation = interpretAddress({
@@ -702,21 +754,34 @@ describe("interpretAddress", () => {
 
   test.each([
     ["305 E 51st Apt 19A", "E", "51ST", "APT", "19A", "51ST APT 19A"],
-    ["11 Wordsworth Unit 1", undefined, "WORDSWORTH", "UNIT", "1", "WORDSWORTH UNIT 1"],
+    [
+      "11 Wordsworth Unit 1",
+      undefined,
+      "WORDSWORTH",
+      "UNIT",
+      "1",
+      "WORDSWORTH UNIT 1",
+    ],
     ["1360 Ashford #702", undefined, "ASHFORD", "#", "702", "ASHFORD # 702"],
   ])(
     "rescues the suffixless street in %s via its unit keyword",
-    (deliveryLine, preDirectional, streetName, designator, number, literalStreetName) => {
+    (
+      deliveryLine,
+      preDirectional,
+      streetName,
+      designator,
+      number,
+      literalStreetName,
+    ) => {
       const interpretation = interpretAddress({
         deliveryLine,
         city: "Test City",
         state: "TX",
       });
 
-      expect(interpretation.candidates.map((candidate) => candidate.id)).toEqual([
-        "unit-keyword-as-unit",
-        "unit-keyword-as-street",
-      ]);
+      expect(
+        interpretation.candidates.slice(0, 2).map((candidate) => candidate.id),
+      ).toEqual(["unit-keyword-as-unit", "unit-keyword-as-street"]);
       expect(interpretation.candidates[0]?.components).toMatchObject({
         streetName,
         secondary: { designator, number },
@@ -728,7 +793,9 @@ describe("interpretAddress", () => {
       expect(interpretation.candidates[1]?.components.streetName).toBe(
         literalStreetName,
       );
-      expect(interpretation.candidates[1]?.components.secondary).toBeUndefined();
+      expect(
+        interpretation.candidates[1]?.components.secondary,
+      ).toBeUndefined();
     },
   );
 
@@ -746,7 +813,7 @@ describe("interpretAddress", () => {
     });
   });
 
-  test("does not infer a unit from a bare trailing number without a keyword", () => {
+  test("preserves street and unit readings of a suffixless bare number", () => {
     const interpretation = interpretAddress({
       deliveryLine: "1360 Ashford 702",
       city: "San Juan",
@@ -754,7 +821,11 @@ describe("interpretAddress", () => {
       postalCode: "00907",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(2);
+    expect(interpretation.candidates[1]?.components).toMatchObject({
+      streetName: "ASHFORD",
+      secondary: { number: "702" },
+    });
     expect(interpretation.candidates[0]?.components).toMatchObject({
       houseNumber: "1360",
       streetName: "ASHFORD 702",
@@ -769,10 +840,9 @@ describe("interpretAddress", () => {
       state: "CA",
     });
 
-    expect(interpretation.candidates.map((candidate) => candidate.id)).toEqual([
-      "trailing-token-as-unit",
-      "trailing-token-as-street",
-    ]);
+    expect(
+      interpretation.candidates.slice(0, 2).map((candidate) => candidate.id),
+    ).toEqual(["trailing-token-as-unit", "trailing-token-as-street"]);
     expect(interpretation.candidates[0]?.components).toMatchObject({
       streetName: "O'CONNOR",
       streetSuffix: "AVE",
@@ -790,7 +860,11 @@ describe("interpretAddress", () => {
       state: "CA",
     });
 
-    expect(interpretation.candidates).toHaveLength(1);
+    expect(interpretation.candidates).toHaveLength(2);
+    expect(interpretation.candidates[1]?.components).toMatchObject({
+      streetName: "OCEAN FRONT",
+      secondary: { number: "5" },
+    });
     expect(interpretation.candidates[0]?.components).toMatchObject({
       streetName: "OCEAN FRONT 5",
     });
@@ -854,9 +928,7 @@ describe("interpretFullAddress", () => {
   });
 
   test("infers an unseparated street-city boundary as a candidate", () => {
-    const interpretation = interpretFullAddress(
-      "123 Main St Austin TX 78701",
-    );
+    const interpretation = interpretFullAddress("123 Main St Austin TX 78701");
     const candidate = interpretation.candidates.find(
       ({ components }) =>
         components.streetName === "MAIN" &&

@@ -2,6 +2,8 @@ dist/
 node_modules/
 *.tgz
 .DS_Store
+.local/
+__pycache__/
 
 # Local corpus evaluation harness
 /scripts/corpus/

@@ -10,9 +10,14 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
   "files": [
@@ -41,16 +46,33 @@
     "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean --target node18",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test && npm run build",
+    "test:package": "node scripts/check-package.mjs",
+    "test:research-ui": "node scripts/check-research-explorer.mjs",
+    "check": "npm run typecheck && npm test && npm run build && npm run test:package",
+    "research": "node scripts/research-cycle.mjs",
+    "research:report": "node scripts/research-report.mjs",
+    "research:prepare": "node scripts/prepare-valid-corpus.mjs",
+    "research:review": "node scripts/prepare-correctness-review.mjs",
+    "research:label": "node scripts/labeling-pilot.mjs",
+    "research:label-progress": "node scripts/labeling-batches.mjs progress",
+    "research:calibration": "node scripts/review-workspace.mjs prepare",
+    "research:review-ui": "node scripts/review-server.mjs",
+    "research:score-reviewed": "node scripts/score-human-review.mjs",
+    "research:prepare-agent-benchmark": "node scripts/agent-benchmark.mjs prepare",
+    "research:score-agent": "node scripts/agent-benchmark.mjs evaluate",
+    "test:review-ui": "node scripts/check-review-ui.mjs",
     "prepublishOnly": "npm run check",
-    "package:files": "bash scripts/list-package-files.sh"
+    "package:files": "bash scripts/list-package-files.sh",
+    "research:decide": "node scripts/research-experiment.mjs"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
+    "esbuild": "0.27.2",
+    "playwright": "1.63.0",
     "tsup": "8.5.1",
     "typescript": "5.9.3",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   }
 }

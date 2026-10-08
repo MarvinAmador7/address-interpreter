@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Address Interpreter · Research lab</title>
+    <style>/* REPORT_STYLE */</style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to research</a>
+    <header class="app-header">
+      <a class="brand" href="#main"><span class="brand-mark" aria-hidden="true">⌖</span>Address Interpreter<span class="brand-divider">/</span><span>Research lab</span></a>
+      <div class="refresh"><span id="updated"></span><label><input id="auto" type="checkbox" /> Auto-refresh</label><button id="refresh" class="quiet">Refresh</button><button id="download" class="quiet">Export data</button></div>
+    </header>
+    <main id="main">
+      <div class="page-heading"><div><h1>Address parsing, with evidence</h1><p>US address structure, complete secondary chains, and explicit alternative readings.</p></div><a class="documentation" href="https://github.com/MarvinAmador7/address-interpreter#readme" target="_blank" rel="noopener noreferrer">Documentation ↗</a></div>
+      <aside id="latest" class="research-status" aria-label="Parser correctness target and diagnostic evidence"></aside>
+      <nav class="view-tabs" role="tablist" aria-label="Research lab sections">
+        <button id="tab-overview" role="tab" data-view="overview" aria-controls="view-overview" aria-selected="true">Overview</button>
+        <button id="tab-benchmarks" role="tab" data-view="benchmarks" aria-controls="view-benchmarks" aria-selected="false" tabindex="-1">Benchmarks</button>
+        <button id="tab-research" role="tab" data-view="research" aria-controls="view-research" aria-selected="false" tabindex="-1">Research</button>
+        <button id="tab-method" role="tab" data-view="method" aria-controls="view-method" aria-selected="false" tabindex="-1">Data &amp; methods</button>
+        <button id="tab-try" role="tab" data-view="try" aria-controls="view-try" aria-selected="false" tabindex="-1">Try the parser</button>
+      </nav>
+      <section id="view-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div class="overview-intro"><div><p class="eyebrow">For property ingestion and data engineering</p><h2>Preserve building, floor<br>and unit identifiers.</h2><p>A delivery line can contain several identifiers or support more than one reading. Inspect the structure the parser finds, trace it to the original text, and carry the alternatives into your own application.</p><button class="primary" data-open="try">Explore an address →</button></div><div class="example-preview"><span class="eyebrow">Synthetic example · live parser below</span><code>12 Oak St Bldg A Floor 2 Apt 204</code><ol><li><span>Street</span><strong>12 OAK ST</strong></li><li><span>Building</span><strong>A</strong></li><li><span>Floor</span><strong>2</strong></li><li><span>Apartment</span><strong>204</strong></li></ol><button class="quiet" data-example="chain">Inspect output &amp; source spans →</button></div></div>
+        <div class="section-heading"><div><h2>What the evidence supports today</h2><p>Measurements carry their scope and maturity with them.</p></div></div>
+        <div id="evidence-overview" class="evidence-overview"></div>
+        <div class="scope-columns"><section><h3>Use the library to interpret text</h3><p>Structured fields, ordered secondary components, original source spans, and unranked alternatives. Parsing runs locally and requires no address database.</p></section><section><h3>Reference matching is a separate task</h3><p>The parser does not establish that an address exists, is deliverable, or identifies a unique property. The planned cloud matching service will need its own identity and unit-level evaluation.</p></section></div>
+      </section>
+      <section id="view-benchmarks" role="tabpanel" aria-labelledby="tab-benchmarks" hidden>
+        <div class="section-heading"><div><h2>Benchmark evidence</h2><p>Correctness evaluation is in preparation. Existing corpus results measure cross-source agreement.</p></div><span class="badge neutral">No released accuracy claim</span></div>
+        <div id="benchmark-status" class="benchmark-status"></div>
+        <details class="method benchmark-contract"><summary>Scoring contract &amp; missing evidence</summary><div id="benchmark-contract"></div></details>
+        <section id="agent-benchmark" class="agent-benchmark" aria-labelledby="agent-benchmark-title" hidden></section>
+      <div id="research-filters">
+        <div class="toolbar">
+          <label
+            >Corpus<select id="dataset"></select
+            ><span id="corpus-label" hidden></span></label
+          ><label data-diagnostic-filter
+            >Measurement<select id="scenario">
+              <option value="source-listing">
+                MLS → ATTOM field agreement
+              </option>
+              <option value="source-property">Recorded property line</option>
+              <option value="generated-explicit">
+                Generated · explicit unit
+              </option>
+              <option value="generated-bare">Generated · bare unit</option>
+              <option value="generated-full">Generated · full address</option>
+            </select></label
+          ><label data-diagnostic-filter
+            >Cohort<select id="cohort">
+              <option value="all">All records</option>
+              <option value="geographic">Geographic</option>
+              <option value="challenge">Difficult formats</option>
+            </select></label
+          >
+          <label
+            >USA state<select id="region" aria-describedby="scope-note"></select
+          ></label>
+        </div>
+
+        <p id="scope-note" class="scope-note"></p>
+      </div>
+      <div id="diagnostic-results">
+        <div class="experiment-grid">
+          <section class="chart-shell" aria-labelledby="chart-title">
+            <div class="chart-heading"><div><h2 id="chart-title">Cross-source agreement over time</h2><p id="chart-kicker" class="section-caption">Diagnostic measurement</p></div><div class="segmented" aria-label="Chart horizontal axis"><button data-mode="iteration" aria-pressed="true">Cycles</button><button data-mode="cost" aria-pressed="false">Candidates</button></div></div>
+            <div class="legend"><span><i class="dot development"></i>Development</span><span><i class="diamond"></i>Holdout</span><span><i class="dot rejected"></i>Regressed</span><label><input type="checkbox" id="holdout" checked /> Include holdout</label></div>
+            <div class="plot-column"><div id="chart" class="chart" aria-label="Interactive research chart"></div><p class="chart-caption" id="chart-caption"></p></div>
+          </section>
+          <aside class="detail" id="detail" aria-live="polite" aria-label="Selected experiment"></aside>
+        </div>
+        <div class="lower-grid">
+          <section class="panel history-panel" aria-labelledby="history-title"><div class="panel-title"><h2 id="history-title">Recorded evaluations</h2><span id="run-count" class="count"></span></div><div class="run-columns" aria-hidden="true"><span>Cycle / change</span><span>Agreement</span></div><div id="timeline"></div></section>
+          <section class="panel" aria-labelledby="failures-title"><div class="panel-title"><h2 id="failures-title">Field disagreements</h2><span class="count">Selected cycle</span></div><div id="failures"></div><p class="subtle">A case can differ in several fields. Differences from ATTOM are not automatically parser errors.</p></section>
+        </div>
+      </div>
+      <details class="state-section" id="geography"><summary>Explore state results</summary><div class="state-section-body">
+        <div class="section-heading"><div><h2 id="states-title">Agreement by state</h2><p id="states-caption"></p></div><label class="state-sort">Sort states<select id="state-sort"><option value="score">Lowest agreement</option><option value="name">State name</option><option value="sample">Largest sample</option><option value="gain">Largest improvement</option></select></label></div>
+        <p class="section-caption">MLS → ATTOM · all cohorts. Select a state to open its experiment history. Bars show 0–100%; Δ compares with the selected cycle's baseline.</p>
+        <div id="states-chart" class="states-chart" role="group" aria-label="State agreement comparison"></div>
+        <p class="subtle">The county-balanced sample is not population weighted. Counts show matched / evaluated records; smaller samples provide less evidence.</p>
+      </div></details>
+      </section>
+      <section id="view-research" role="tabpanel" aria-labelledby="tab-research" hidden><div class="section-heading"><div><h2>Research notebook</h2><p>Questions, observed outcomes, and decisions. A completed evaluation is evidence; it does not by itself establish a successful experiment.</p></div></div><div id="research-notebook"></div></section>
+      <section id="view-method" role="tabpanel" aria-labelledby="tab-method" hidden>
+        <div class="section-heading"><div><h2>Data &amp; methods</h2><p>What the report measures, where its evidence comes from, and what remains unverified.</p></div></div>
+        <div class="method-intro"><p><strong>One frozen MLS corpus.</strong> Admission checks compatibility with ATTOM fields. This is a selected property-data population, not a representative sample of every US address. State presence alone does not establish nationwide coverage.</p><p><strong>Private inputs, inspectable methods.</strong> This report shares aggregates and synthetic examples. Private MLS rows are excluded. The scoring code and synthetic fixtures can be reproduced publicly; the corpus score cannot be reproduced from this HTML alone.</p></div>
+        <div id="method-identity" class="identity-table"></div>
+      <details class="method annotation-evidence" open><summary>Annotation quality &amp; labeling</summary><div class="method-body">
+        <section id="labeling-expansion" class="labeling-expansion" aria-labelledby="expansion-title" hidden></section>
+        <div id="labeling-panel" aria-label="Agent labeling progress" hidden><div class="section-heading"><div><h2>Blind annotation pilot</h2><p>Two Luna passes, source-token checks, and a separate reviewer.</p></div><span class="badge neutral">Provisional labels</span></div><label class="label-slice">Pilot pass agreement by state<select id="label-region"></select></label><div id="labeling-progress"></div></div>
+        <div id="labeling-empty" class="empty" hidden>No labeling pilot is attached to this report. Prepare a development review sample to begin tracking labels here.</div>
+      </div></details>
+        <div id="historical-evidence" class="historical-evidence"></div>
+        <details id="curation" class="method" hidden>
+          <summary id="curation-summary">Corpus admission</summary>
+          <p>
+            These are cross-source consistency filters, not an independently
+            validated set of valid addresses. Exclusions use listing text and
+            ATTOM fields, independently of parser output. Historical scores on
+            the original download are archived separately.
+          </p>
+          <div id="curation-reasons"></div>
+          <p class="subtle">
+            Reason counts can overlap. Unverified or conflicting annotations are
+            quarantined, not declared nonexistent addresses. Admission checks do
+            not establish deliverability.
+          </p>
+        </details>
+      <details class="method" open>
+        <summary>What these measurements mean</summary>
+        <div class="method-grid">
+          <p>
+            <strong>These plots measure agreement.</strong> At least one
+            interpretation agrees with the source fields. This does not
+            establish deliverability, uniqueness, or matching precision.
+            Generated inputs are formatting tests, separate from untouched MLS
+            strings. New evaluations also record first-candidate agreement,
+            reliance on later candidates, and readings that disagree with
+            reference fields. Candidate order is unranked. These counts do not
+            measure precision.
+          </p>
+          <p>
+            <strong>Know the comparison source.</strong> The input is
+            MLSLISTINGADDRESS; its comparison labels come from ATTOM
+            PROPERTYADDRESS fields. This measures cross-source agreement, not
+            accuracy against native MLS component labels.
+          </p>
+          <p>
+            <strong>Correctness is not measured yet.</strong> The correctness
+            target requires independent labels for the exact input, complete
+            building/floor/unit chains, and checks for unsupported readings.
+            Increasing ATTOM agreement cannot pass that target. Parser
+            rejections of valid input remain failures; missing reference fields
+            do not make an address invalid.
+          </p>
+          <p>
+            <strong>Compare the same sample.</strong> Cohort and state controls
+            keep populations separate. State breakdowns use raw MLS strings
+            across both cohorts. Development points connect only when corpus, policy, evaluator, metric version, split, and parser options are recorded and identical. Missing historical identities remain unconnected. Holdout diamonds stand alone; their
+            denominator may differ after duplicate-address exclusions.
+          </p>
+          <p>
+            <strong>Disagreements stay visible.</strong> Historical red points
+            lost previous reference agreements. Unscored checks and interrupted evaluations remain
+            in the log. Gains and losses in the detail panel compare with that
+            experiment's recorded baseline, which can change between cycles.
+          </p>
+          <p>
+            <strong>Local and self-contained.</strong> This file contains
+            aggregate results and research notes. Its address examples are synthetic; visitor input stays in memory. It loads no external scripts, fonts, or services. Each
+            harness cycle regenerates it. Auto-refresh reloads the saved report
+            every 30 seconds.
+          </p>
+        </div>
+      </details>
+
+      </section>
+      <section id="view-try" role="tabpanel" aria-labelledby="tab-try" hidden>
+        <div class="section-heading"><div><h2>Inspect a real interpretation</h2><p>The bundled library runs in your browser. Inputs are not sent, saved, or included in exported results.</p></div><span class="badge neutral">Local parser</span></div>
+        <div class="explorer-grid"><form id="parser-form" class="parser-form"><label for="parser-input">Address</label><textarea id="parser-input" rows="3" maxlength="1024" spellcheck="false" aria-describedby="parser-input-help">12 Oak St Bldg A Floor 2 Apt 204</textarea><p id="parser-input-help" class="subtle">Paste a full address with city, state and ZIP, or just a delivery line.</p><label class="option-check"><input id="parser-spelling" type="checkbox" /> Include spelling alternatives</label><p class="subtle">Off still permits structural alternatives and feed repairs. Candidates are unranked.</p><button class="primary" type="submit">Parse address</button><div class="challenge-examples"><h3>Synthetic challenge examples</h3><button type="button" data-example="locality">City, state and ZIP</button><button type="button" data-example="chain">Building → floor → apartment</button><button type="button" data-example="ambiguous">Ambiguous trailing identifier</button><button type="button" data-example="hyphen">Hyphenated house number</button><button type="button" data-example="box">PO box</button><button type="button" data-example="rejected">Non-address input</button></div></form><div><p id="parser-build" class="section-caption"></p><div id="parser-output" aria-live="polite"></div></div></div>
+        <details class="method" open><summary>Use the same API in your application</summary><div class="method-body"><pre><code>npm install @marvin-amador-7/address-interpreter</code></pre><pre><code>import { interpretFullAddress } from '@marvin-amador-7/address-interpreter';
+
+const result = interpretFullAddress(
+  '12 Oak St Bldg A Floor 2 Apt 204, Vero Beach, FL 32963',
+  { spellingAlternatives: false }
+);
+// Inspect every candidate: components, assumptions, sourceSpans.</code></pre><p class="subtle">This explorer uses the local build identified above. A published package with the same version number may have different code; pin and test the build you deploy.</p></div></details>
+      </section>
+      <footer><span>One frozen corpus · aggregate evidence · synthetic examples</span><span>Self-contained report. No external services.</span></footer>
+    </main>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <script type="application/json" id="research-data">{{DATA}}</script>
+    <script>/* PARSER_RUNTIME */</script>
+    <script>/* REPORT_SCRIPT */</script>
+  </body>
+</html>
